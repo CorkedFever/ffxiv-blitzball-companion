@@ -1,5 +1,5 @@
 {
-  "Author": "Jasmine",
+  "Author": "Ktsukino",
   "Name": "Blitzball Companion",
   "Punchline": "Follows a live game of Blitzball, for players, refs and announcers.",
   "Description": "Reads a Blitzball match out of Yell chat and follows it against the rules: phases, rounds, score, possession, and where every player is standing. Shows the sphere on a field view and over the arena itself, with each player's declared action and their roll. Flags anything that does not match the rules, and leaves the call to the referees.",

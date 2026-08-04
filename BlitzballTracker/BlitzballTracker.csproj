@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Version>0.2.0.0</Version>
-    <Authors>Jasmine</Authors>
+    <Authors>Ktsukino</Authors>
     <!-- The Dalamud SDK does not turn these on for us. -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
