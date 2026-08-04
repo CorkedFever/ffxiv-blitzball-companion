@@ -1,0 +1,51 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+
+# Rider / ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages.lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dalamud packaging output
+*.zip
+
+# Chat logs never go in. They are full of real players' character names, and they
+# belong to the people who played the match rather than to this repository.
+#
+# Tests that read a real match sample skip themselves when it is not there, so a
+# fresh clone still builds and runs green without one.
+recordings/
+*.log
+*.txt
+!README.md
+BlitzballTracker.Tests/Fixtures/

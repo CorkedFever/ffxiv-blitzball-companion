@@ -1,0 +1,17 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <Version>0.2.0.0</Version>
+    <Authors>Jasmine</Authors>
+    <!-- The Dalamud SDK does not turn these on for us. -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Tracks Blitzball RP game state by parsing Yell chat. Shows current round, phase, score, ball carrier, player positions, actions, dice rolls, and per-player stats via an in-game overlay.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlitzballTracker.Core\BlitzballTracker.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,205 @@
+﻿@page "/"
+@inject BlitzballTracker.Web.Data.GameService Svc
+@implements IDisposable
+
+<PageTitle>Dashboard — EBL Blitzball Tracker</PageTitle>
+
+@if (!Svc.Game.IsActive && Svc.EventsRecognized == 0)
+{
+    <div style="margin-top: 2rem;">
+        <div class="upload-zone">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Upload a game log file to get started</div>
+            <div class="upload-hint">.txt chat log files from FFXIV</div>
+        </div>
+        <div style="text-align:center; margin-top:1rem;">
+            <label class="btn btn-primary" style="position:relative; overflow:hidden; cursor:pointer;">
+                Choose File
+                <InputFile OnChange="HandleFileUpload" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;" accept=".txt,.log,.csv" />
+            </label>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Scoreboard -->
+    <div class="scoreboard">
+        <div class="team-name team-home">@HomeTeam</div>
+        <div class="score-display">@Svc.Game.Score.Home : @Svc.Game.Score.Away</div>
+        <div class="team-name team-away">@AwayTeam</div>
+    </div>
+
+    <div class="game-info">
+        Set @Svc.Game.Set — Round @Svc.Game.Round
+        <span class="phase-badge @PhaseClass">@PhaseName</span>
+        @if (Svc.Game.BallCarrier != null)
+        {
+            <span> — Ball: <span class="ball-carrier">@Svc.Game.BallCarrier</span></span>
+        }
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stats-grid" style="margin-top: 1.5rem;">
+        <div class="card stat-box">
+            <div class="stat-value">@Svc.LinesProcessed</div>
+            <div class="stat-label">Lines Parsed</div>
+        </div>
+        <div class="card stat-box">
+            <div class="stat-value">@Svc.EventsRecognized</div>
+            <div class="stat-label">Events</div>
+        </div>
+        <div class="card stat-box">
+            <div class="stat-value">@Svc.Game.Players.Count</div>
+            <div class="stat-label">Players</div>
+        </div>
+        <div class="card stat-box">
+            <div class="stat-value">@Svc.Game.GameLog.Count</div>
+            <div class="stat-label">Actions</div>
+        </div>
+    </div>
+
+    <!-- Player Overview -->
+    <div class="card">
+        <div class="card-title">Player Overview</div>
+        <table class="blitz-table">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Role</th>
+                    <th class="num">Actions</th>
+                    <th class="num">Success</th>
+                    <th class="num">Avg Roll</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Svc.Game.Players.Values.OrderByDescending(p => p.ActionsAttempted))
+                {
+                    <tr>
+                        <td>
+                            @if (p.HasBall) { <span title="Ball Carrier">🏐 </span> }
+                            @p.Name
+                        </td>
+                        <td><span class="pill pill-role">@RoleLabel(p.Role)</span></td>
+                        <td class="num">@(p.ActionsAttempted > 0 ? $"{p.ActionsSucceeded}/{p.ActionsAttempted}" : "—")</td>
+                        <td class="num">
+                            @if (p.ActionsAttempted > 0)
+                            {
+                                @($"{p.SuccessRate:P0}")
+                                <div class="success-bar">
+                                    <div class="success-fill @SuccessFillClass(p.SuccessRate)" style="width: @($"{p.SuccessRate * 100:F0}%")"></div>
+                                </div>
+                            }
+                            else { <span>—</span> }
+                        </td>
+                        <td class="num">@(p.TotalRolls > 0 ? $"{p.RollAverage:F1}" : "—")</td>
+                        <td>@StatusPill(p)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Recent Play-by-Play -->
+    <div class="card">
+        <div class="card-title">Recent Activity</div>
+        <div class="pbp-feed" style="max-height: 300px;">
+            @foreach (var entry in Svc.Game.PlayByPlay.TakeLast(15).Reverse())
+            {
+                <div class="pbp-entry @EntryClass(entry)">@entry</div>
+            }
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 1rem;">
+        <button class="btn btn-danger" @onclick="Svc.Reset">Reset Game</button>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Svc.OnStateChanged += HandleStateChanged;
+    }
+
+    public void Dispose()
+    {
+        Svc.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            var content = await reader.ReadToEndAsync();
+            Svc.ParseLogFile(content, file.Name);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[UPLOAD ERROR] {ex}");
+            throw;
+        }
+    }
+
+    private string HomeTeam => string.IsNullOrEmpty(Svc.Game.HomeTeam) ? "HOME" : Svc.Game.HomeTeam;
+    private string AwayTeam => string.IsNullOrEmpty(Svc.Game.AwayTeam) ? "AWAY" : Svc.Game.AwayTeam;
+
+    private string PhaseName => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "Outer Phase",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "Inner Phase",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "Ball Carrier",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "BUZZER",
+        BlitzballTracker.Core.GameState.GamePhase.Blitzoff => "Blitzoff",
+        _ => Svc.Game.Phase.ToString(),
+    };
+
+    private string PhaseClass => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "phase-outer",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "phase-inner",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "phase-bc",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "phase-buzzer",
+        _ => "",
+    };
+
+    private static string RoleLabel(BlitzballTracker.Core.GameState.PlayerRole role) => role switch
+    {
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield => "M",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward => "LF",
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward => "RF",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender => "LD",
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender => "RD",
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper => "GK",
+        _ => "—",
+    };
+
+    private static string SuccessFillClass(double rate) => rate switch
+    {
+        >= 0.6 => "fill-high",
+        >= 0.35 => "fill-mid",
+        _ => "fill-low",
+    };
+
+    private static RenderFragment StatusPill(BlitzballTracker.Core.GameState.PlayerState p) => builder =>
+    {
+        if (p.HasBall) { builder.AddMarkupContent(0, "<span class='pill pill-ball'>BALL</span>"); }
+        else if (p.IsDazed) { builder.AddMarkupContent(0, "<span class='pill pill-dazed'>DAZED</span>"); }
+        else if (p.IsBlocked) { builder.AddMarkupContent(0, "<span class='pill pill-blocked'>BLOCKED</span>"); }
+        else { builder.AddMarkupContent(0, "<span class='pill pill-ok'>OK</span>"); }
+    };
+
+    private static string EntryClass(string entry) =>
+        entry.Contains("FLAG") ? "pbp-flag" :
+        entry.Contains("GOAL") ? "pbp-goal" :
+        entry.Contains("SAVE") ? "pbp-save" : "";
+}

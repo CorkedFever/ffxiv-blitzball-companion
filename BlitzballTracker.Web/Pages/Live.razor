@@ -1,0 +1,161 @@
+@page "/live"
+@inject BlitzballTracker.Web.Data.LiveService Svc
+@implements IDisposable
+
+<PageTitle>Live — EBL Blitzball Tracker</PageTitle>
+
+<div class="replay-layout">
+    <!-- LEFT: Field Card -->
+    <div class="replay-left">
+        <div class="field-card">
+            <div class="scoreboard">
+                <div class="team-name team-home">@HomeTeam</div>
+                <div class="score-display">@Svc.Game.Score.Home : @Svc.Game.Score.Away</div>
+                <div class="team-name team-away">@AwayTeam</div>
+            </div>
+
+            <div class="game-info">
+                Set @Svc.Game.Set — Round @Svc.Game.Round
+                <span class="phase-badge @PhaseClass">@PhaseName</span>
+                @if (Svc.Game.BallCarrier != null)
+                {
+                    <span> — Ball: <span class="ball-carrier">@Svc.Game.BallCarrier</span></span>
+                }
+            </div>
+
+            <Blitzsphere Source="live" />
+        </div>
+
+        <!-- Play-by-Play Feed -->
+        <div class="card">
+            <div class="card-title">Play-by-Play</div>
+            <div class="pbp-feed" style="max-height: 300px;">
+                @foreach (var entry in Svc.Game.PlayByPlay.TakeLast(25).Reverse())
+                {
+                    <div class="pbp-entry @EntryClass(entry)">@entry</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Players -->
+    <div class="replay-right">
+        <div class="card">
+            <div class="card-title">
+                <span style="color: var(--success);">● LIVE</span>
+                <span style="margin-left: 0.5rem; color: var(--text-dim); font-size: 0.75rem;">
+                    @Svc.LinesProcessed lines — @Svc.EventsRecognized events
+                </span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.75rem;">
+                Waiting for plugin feed on <code>POST /api/live</code>
+            </div>
+            <button class="replay-btn" @onclick="ResetGame" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">🔄 Reset Game</button>
+        </div>
+
+        @if (Svc.Game.Players.Count > 0)
+        {
+            <div class="card">
+                <div class="card-title">Players (@Svc.Game.Players.Count)</div>
+                <table class="blitz-table" style="font-size: 0.8rem;">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Team</th>
+                            <th>Role</th>
+                            <th class="num">Act</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Svc.Game.Players.Values.OrderBy(p => p.Team).ThenByDescending(p => p.ActionsAttempted))
+                        {
+                            <tr>
+                                <td style="font-size: 0.75rem;">
+                                    @if (p.HasBall) { <span title="Ball Carrier">🏐</span> }
+                                    @p.Name
+                                </td>
+                                <td><span class="pill pill-team">@(string.IsNullOrEmpty(p.Team) ? "?" : p.Team)</span></td>
+                                <td><span class="pill pill-role">@RoleLabel(p.Role)</span></td>
+                                <td class="num">@(p.ActionsAttempted > 0 ? $"{p.ActionsSucceeded}/{p.ActionsAttempted}" : "—")</td>
+                                <td>@StatusPill(p)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Svc.OnStateChanged += HandleStateChanged;
+    }
+
+    public void Dispose()
+    {
+        Svc.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ResetGame()
+    {
+        Svc.Reset();
+    }
+
+    private string HomeTeam => string.IsNullOrEmpty(Svc.Game.HomeTeam) ? "HOME" : Svc.Game.HomeTeam;
+    private string AwayTeam => string.IsNullOrEmpty(Svc.Game.AwayTeam) ? "AWAY" : Svc.Game.AwayTeam;
+
+    private string PhaseName => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "Outer Phase",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "Inner Phase",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "Ball Carrier",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "BUZZER",
+        BlitzballTracker.Core.GameState.GamePhase.Blitzoff => "Blitzoff",
+        _ => Svc.Game.Phase.ToString(),
+    };
+
+    private string PhaseClass => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "phase-outer",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "phase-inner",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "phase-bc",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "phase-buzzer",
+        _ => "",
+    };
+
+    private static string RoleLabel(BlitzballTracker.Core.GameState.PlayerRole role) => role switch
+    {
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield => "M",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward => "LF",
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward => "RF",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender => "LD",
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender => "RD",
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper => "GK",
+        _ => "?",
+    };
+
+    private static Microsoft.AspNetCore.Components.MarkupString StatusPill(BlitzballTracker.Core.GameState.PlayerState p)
+    {
+        if (p.IsDazed) return new("<span class='pill pill-dazed'>Dazed</span>");
+        if (p.HasBall) return new("<span class='pill pill-bc'>Ball</span>");
+        return new("<span class='pill pill-ok'>OK</span>");
+    }
+
+    private static string EntryClass(string entry)
+    {
+        if (entry.Contains("GOAL", StringComparison.OrdinalIgnoreCase)) return "pbp-goal";
+        if (entry.Contains("SHOOT", StringComparison.OrdinalIgnoreCase)) return "pbp-shoot";
+        if (entry.Contains("TACKLE", StringComparison.OrdinalIgnoreCase)) return "pbp-tackle";
+        return "";
+    }
+}

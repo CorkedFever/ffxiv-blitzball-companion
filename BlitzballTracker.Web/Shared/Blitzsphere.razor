@@ -1,0 +1,238 @@
+@inject BlitzballTracker.Web.Data.GameService GameSvc
+@inject BlitzballTracker.Web.Data.LiveService LiveSvc
+@implements IDisposable
+
+<div class="sphere-container">
+    <svg viewBox="0 0 600 340" class="blitzsphere-svg">
+        <defs>
+            <!-- Glow filter for ball carrier -->
+            <filter id="glow">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                </feMerge>
+            </filter>
+            <!-- Rush Gate pulse -->
+            <filter id="rushGlow">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                </feMerge>
+            </filter>
+        </defs>
+
+        <!-- Field connections (lanes) -->
+        @foreach (var (from, to) in Connections)
+        {
+            var p1 = NodePositions[from];
+            var p2 = NodePositions[to];
+            <line x1="@p1.X" y1="@p1.Y" x2="@p2.X" y2="@p2.Y" class="lane-line" />
+        }
+
+        <!-- Zone backgrounds -->
+        @foreach (var (waymark, pos) in NodePositions)
+        {
+            var isGoal = waymark == BlitzballTracker.Core.GameState.Waymark.D || waymark == BlitzballTracker.Core.GameState.Waymark.Four;
+            var hasRushGate = Game.RushGateAt(waymark) is not null;
+            var hasBall = BallWaymark == waymark;
+
+            <g class="@(selectedPlayer != null ? "zone-clickable" : "")" @onclick="() => OnZoneClick(waymark)" style="cursor: @(selectedPlayer != null ? "pointer" : "default")">
+                <!-- Rush Gate indicator -->
+                @if (hasRushGate)
+                {
+                    <circle cx="@pos.X" cy="@pos.Y" r="38" class="rush-gate-ring" filter="url(#rushGlow)" />
+                }
+
+                <!-- Zone circle -->
+                <circle cx="@pos.X" cy="@pos.Y" r="32"
+                    class="zone-circle @(isGoal ? "zone-goal" : "") @(hasBall ? "zone-ball" : "") @(selectedPlayer != null ? "zone-target" : "")" />
+
+                <!-- Zone label -->
+                <text x="@pos.X" y="@(pos.Y - 18)" class="zone-label">@WaymarkLabel(waymark)</text>
+                <text x="@pos.X" y="@(pos.Y - 6)" class="zone-sublabel">@ZoneName(waymark)</text>
+            </g>
+        }
+
+        <!-- Players at each node -->
+        @foreach (var (waymark, pos) in NodePositions)
+        {
+            var playersHere = GetPlayersAt(waymark);
+            var count = playersHere.Count;
+            if (count > 0)
+            {
+                var startY = pos.Y + 8;
+                var spacing = count <= 3 ? 13 : 11;
+                var baseY = startY - (count - 1) * spacing / 2.0;
+
+                @for (var i = 0; i < count; i++)
+                {
+                    var p = playersHere[i];
+                    var y = baseY + i * spacing;
+                    var isHome = p.Team.Equals(Game.HomeTeam, StringComparison.OrdinalIgnoreCase);
+                    var dotClass = isHome ? "player-dot-home" : "player-dot-away";
+                    var textClass = isHome ? "player-name-home" : "player-name-away";
+
+                    <g class="@(p.HasBall ? "player-bc" : "") player-clickable @(selectedPlayer == p ? "player-selected" : "")"
+                       @onclick="() => OnPlayerClick(p)" @onclick:stopPropagation="true"
+                       style="cursor: pointer">
+                        <!-- Player dot -->
+                        <circle cx="@(pos.X - 20)" cy="@y" r="4" class="@dotClass"
+                            @(p.HasBall ? "filter=\"url(#glow)\"" : "") />
+
+                        <!-- Player name -->
+                        <text x="@(pos.X - 14)" y="@(y + 4)"
+                            class="player-name @textClass @(p.IsDazed ? "player-dazed" : "") @(p.HasBall ? "player-has-ball" : "")">
+                            @ShortName(p) @RoleBadge(p)
+                        </text>
+                    </g>
+                }
+            }
+        }
+    </svg>
+
+    @if (selectedPlayer != null)
+    {
+        <div class="sphere-hint">Click a node to move @ShortName(selectedPlayer) — or click them again to cancel</div>
+    }
+
+    @if (Game.RushGates.Count > 0)
+    {
+        <div class="sphere-legend">
+            <span class="legend-item"><span class="legend-swatch rush-swatch"></span> Rush Gate</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Set to "live" to use LiveService instead of GameService.</summary>
+    [Parameter] public string Source { get; set; } = "replay";
+
+    private BlitzballTracker.Core.GameState.BlitzGame Game =>
+        Source == "live" ? LiveSvc.Game : GameSvc.Game;
+
+    protected override void OnInitialized()
+    {
+        GameSvc.OnStateChanged += HandleStateChanged;
+        LiveSvc.OnStateChanged += HandleStateChanged;
+    }
+
+    public void Dispose()
+    {
+        GameSvc.OnStateChanged -= HandleStateChanged;
+        LiveSvc.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private BlitzballTracker.Core.GameState.PlayerState? selectedPlayer;
+
+    private void OnPlayerClick(BlitzballTracker.Core.GameState.PlayerState player)
+    {
+        selectedPlayer = selectedPlayer == player ? null : player;
+    }
+
+    private void OnZoneClick(BlitzballTracker.Core.GameState.Waymark waymark)
+    {
+        if (selectedPlayer == null) return;
+        selectedPlayer.Position = waymark;
+        selectedPlayer = null;
+        if (Source == "live") LiveSvc.NotifyStateChanged(); else GameSvc.NotifyStateChanged();
+    }
+
+    private record struct Point(int X, int Y);
+
+    private static readonly Dictionary<BlitzballTracker.Core.GameState.Waymark, Point> NodePositions = new()
+    {
+        // Rotated 90° left: D on far left, 4 on far right
+        // Number lane (1, 2) on top, Letter lane (A, B) on bottom
+        [BlitzballTracker.Core.GameState.Waymark.D]    = new(60,  170),
+        [BlitzballTracker.Core.GameState.Waymark.One]  = new(170, 80),
+        [BlitzballTracker.Core.GameState.Waymark.A]    = new(170, 260),
+        [BlitzballTracker.Core.GameState.Waymark.C]    = new(300, 170),
+        [BlitzballTracker.Core.GameState.Waymark.Two]  = new(430, 80),
+        [BlitzballTracker.Core.GameState.Waymark.B]    = new(430, 260),
+        [BlitzballTracker.Core.GameState.Waymark.Four] = new(540, 170),
+    };
+
+    private static readonly (BlitzballTracker.Core.GameState.Waymark, BlitzballTracker.Core.GameState.Waymark)[] Connections =
+    [
+        // Top lane: D — 1 — C — 2 — 4
+        (BlitzballTracker.Core.GameState.Waymark.D, BlitzballTracker.Core.GameState.Waymark.One),
+        (BlitzballTracker.Core.GameState.Waymark.One, BlitzballTracker.Core.GameState.Waymark.C),
+        (BlitzballTracker.Core.GameState.Waymark.C, BlitzballTracker.Core.GameState.Waymark.Two),
+        (BlitzballTracker.Core.GameState.Waymark.Two, BlitzballTracker.Core.GameState.Waymark.Four),
+        // Bottom lane: D — A — C — B — 4
+        (BlitzballTracker.Core.GameState.Waymark.D, BlitzballTracker.Core.GameState.Waymark.A),
+        (BlitzballTracker.Core.GameState.Waymark.A, BlitzballTracker.Core.GameState.Waymark.C),
+        (BlitzballTracker.Core.GameState.Waymark.C, BlitzballTracker.Core.GameState.Waymark.B),
+        (BlitzballTracker.Core.GameState.Waymark.B, BlitzballTracker.Core.GameState.Waymark.Four),
+        // Horizontal: 1 — A, 2 — B
+        (BlitzballTracker.Core.GameState.Waymark.One, BlitzballTracker.Core.GameState.Waymark.A),
+        (BlitzballTracker.Core.GameState.Waymark.Two, BlitzballTracker.Core.GameState.Waymark.B),
+    ];
+
+    private BlitzballTracker.Core.GameState.Waymark BallWaymark
+    {
+        get
+        {
+            if (Game.BallCarrier == null) return BlitzballTracker.Core.GameState.Waymark.None;
+            if (Game.Players.TryGetValue(Game.BallCarrier, out var bc))
+                return bc.Position;
+            return BlitzballTracker.Core.GameState.Waymark.None;
+        }
+    }
+
+    private List<BlitzballTracker.Core.GameState.PlayerState> GetPlayersAt(BlitzballTracker.Core.GameState.Waymark wm)
+    {
+        return Game.Players.Values
+            .Where(p => p.Position == wm)
+            .OrderByDescending(p => p.HasBall)
+            .ThenBy(p => p.Name)
+            .ToList();
+    }
+
+    private static string WaymarkLabel(BlitzballTracker.Core.GameState.Waymark wm) => wm switch
+    {
+        BlitzballTracker.Core.GameState.Waymark.D => "D",
+        BlitzballTracker.Core.GameState.Waymark.One => "1",
+        BlitzballTracker.Core.GameState.Waymark.A => "A",
+        BlitzballTracker.Core.GameState.Waymark.C => "C",
+        BlitzballTracker.Core.GameState.Waymark.Two => "2",
+        BlitzballTracker.Core.GameState.Waymark.B => "B",
+        BlitzballTracker.Core.GameState.Waymark.Four => "4",
+        _ => "",
+    };
+
+    private static string ZoneName(BlitzballTracker.Core.GameState.Waymark wm) => wm switch
+    {
+        BlitzballTracker.Core.GameState.Waymark.D => "GOAL",
+        BlitzballTracker.Core.GameState.Waymark.Four => "GOAL",
+        BlitzballTracker.Core.GameState.Waymark.One or BlitzballTracker.Core.GameState.Waymark.A => "STRIKE",
+        BlitzballTracker.Core.GameState.Waymark.Two or BlitzballTracker.Core.GameState.Waymark.B => "STRIKE",
+        BlitzballTracker.Core.GameState.Waymark.C => "CENTER",
+        _ => "",
+    };
+
+    private static string ShortName(BlitzballTracker.Core.GameState.PlayerState p)
+    {
+        // Show first name only to save space
+        var parts = p.Name.Split(' ');
+        return parts.Length > 1 ? parts[0] : p.Name;
+    }
+
+    private static string RoleBadge(BlitzballTracker.Core.GameState.PlayerState p) => p.Role switch
+    {
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper => "GK",
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield => "M",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward => "LF",
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward => "RF",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender => "LD",
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender => "RD",
+        _ => "",
+    };
+}

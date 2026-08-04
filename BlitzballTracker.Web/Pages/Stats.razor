@@ -1,0 +1,119 @@
+@page "/stats"
+@inject BlitzballTracker.Web.Data.GameService Svc
+
+<PageTitle>Stats — EBL Blitzball Tracker</PageTitle>
+
+@if (Svc.Game.Players.Count == 0)
+{
+    <div class="card" style="text-align:center; padding: 3rem;">
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">No game loaded</div>
+        <div style="color: var(--text-dim);">Upload a log file from the <a href="/" style="color: var(--accent);">Dashboard</a> to see stats.</div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-title">Detailed Player Statistics</div>
+        <table class="blitz-table">
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Role</th>
+                    <th class="num">Actions</th>
+                    <th class="num">Success %</th>
+                    <th class="num">Rolls</th>
+                    <th class="num">Avg Roll</th>
+                    <th class="num">Goals</th>
+                    <th class="num">Saves</th>
+                    <th class="num">Tackles</th>
+                    <th class="num">Blocks</th>
+                    <th class="num">Dives</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Svc.Game.Players.Values.OrderByDescending(p => p.ActionsAttempted))
+                {
+                    <tr>
+                        <td>
+                            @if (p.HasBall) { <span>🏐 </span> }
+                            @p.Name
+                        </td>
+                        <td><span class="pill pill-role">@RoleLabel(p.Role)</span></td>
+                        <td class="num">@(p.ActionsAttempted > 0 ? $"{p.ActionsSucceeded}/{p.ActionsAttempted}" : "—")</td>
+                        <td class="num">
+                            @if (p.ActionsAttempted > 0)
+                            {
+                                @($"{p.SuccessRate:P0}")
+                                <div class="success-bar">
+                                    <div class="success-fill @SuccessFillClass(p.SuccessRate)" style="width: @($"{p.SuccessRate * 100:F0}%")"></div>
+                                </div>
+                            }
+                            else { <span>—</span> }
+                        </td>
+                        <td class="num">@(p.TotalRolls > 0 ? p.TotalRolls.ToString() : "—")</td>
+                        <td class="num">@(p.TotalRolls > 0 ? $"{p.RollAverage:F1}" : "—")</td>
+                        <td class="num">@(p.Goals > 0 ? p.Goals.ToString() : "—")</td>
+                        <td class="num">@(p.Saves > 0 ? p.Saves.ToString() : "—")</td>
+                        <td class="num">@(p.Tackles > 0 ? p.Tackles.ToString() : "—")</td>
+                        <td class="num">@(p.Blocks > 0 ? p.Blocks.ToString() : "—")</td>
+                        <td class="num">@(p.Dives > 0 ? p.Dives.ToString() : "—")</td>
+                        <td>@StatusPill(p)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Action Breakdown -->
+    <div class="card">
+        <div class="card-title">Action Breakdown</div>
+        <div class="stats-grid">
+            @foreach (var group in ActionBreakdown())
+            {
+                <div class="stat-box">
+                    <div class="stat-value">@group.Count</div>
+                    <div class="stat-label">@group.Name</div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private static string RoleLabel(BlitzballTracker.Core.GameState.PlayerRole role) => role switch
+    {
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield => "M",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward => "LF",
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward => "RF",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender => "LD",
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender => "RD",
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper => "GK",
+        _ => "—",
+    };
+
+    private static string SuccessFillClass(double rate) => rate switch
+    {
+        >= 0.6 => "fill-high",
+        >= 0.35 => "fill-mid",
+        _ => "fill-low",
+    };
+
+    private static RenderFragment StatusPill(BlitzballTracker.Core.GameState.PlayerState p) => builder =>
+    {
+        if (p.HasBall) { builder.AddMarkupContent(0, "<span class='pill pill-ball'>BALL</span>"); }
+        else if (p.IsDazed) { builder.AddMarkupContent(0, "<span class='pill pill-dazed'>DAZED</span>"); }
+        else if (p.IsBlocked) { builder.AddMarkupContent(0, "<span class='pill pill-blocked'>BLOCKED</span>"); }
+        else { builder.AddMarkupContent(0, "<span class='pill pill-ok'>OK</span>"); }
+    };
+
+    private record ActionGroup(string Name, int Count);
+
+    private IEnumerable<ActionGroup> ActionBreakdown()
+    {
+        return Svc.Game.GameLog
+            .GroupBy(a => a.Action)
+            .Select(g => new ActionGroup(g.Key.ToString(), g.Count()))
+            .OrderByDescending(g => g.Count);
+    }
+}

@@ -1,0 +1,314 @@
+/* ── EBL Blitzball Tracker Theme ── */
+:root {
+    --bg-dark: #0a0e1a;
+    --bg-card: #131829;
+    --bg-card-hover: #1a2035;
+    --border: #2a3050;
+    --text: #e0e4f0;
+    --text-dim: #8890a8;
+    --accent: #4fc3f7;
+    --accent-glow: rgba(79, 195, 247, 0.3);
+    --success: #66bb6a;
+    --danger: #ef5350;
+    --warning: #ffa726;
+    --gold: #ffd54f;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+}
+
+.app-container { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Top Bar ── */
+.top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, #0d1225, #151d35);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+}
+.brand { display: flex; align-items: center; gap: 0.5rem; }
+.brand-icon { font-size: 1.5rem; }
+.brand-text { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.5px; color: var(--accent); }
+.top-nav { display: flex; gap: 0.25rem; }
+.nav-link {
+    padding: 0.5rem 1rem; border-radius: 6px;
+    color: var(--text-dim); text-decoration: none; font-weight: 500; font-size: 0.9rem;
+    transition: all 0.15s;
+}
+.nav-link:hover { color: var(--text); background: var(--bg-card); }
+.nav-link.active { color: var(--accent); background: var(--bg-card); }
+
+/* ── Content ── */
+.content { flex: 1; padding: 1.5rem; max-width: 1600px; margin: 0 auto; width: 100%; }
+
+/* ── Cards ── */
+.card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem;
+}
+.card-title {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 0.75rem; font-weight: 600;
+}
+
+/* ── Scoreboard ── */
+.field-card {
+    background: linear-gradient(135deg, #0d1225 0%, #151d35 50%, #0d1225 100%);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.5rem; margin-bottom: 1.5rem;
+}
+.scoreboard {
+    display: flex; align-items: center; justify-content: center; gap: 2rem;
+    padding: 1rem 2rem; text-align: center;
+}
+.team-name { font-size: 1.5rem; font-weight: 700; min-width: 160px; }
+.team-home { color: var(--accent); }
+.team-away { color: var(--gold); }
+.score-display { font-size: 3rem; font-weight: 800; letter-spacing: 4px; font-variant-numeric: tabular-nums; }
+.game-info { text-align: center; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.5rem; }
+
+/* ── Phase Badge ── */
+.phase-badge {
+    display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border);
+}
+.phase-outer { border-color: var(--accent); color: var(--accent); }
+.phase-inner { border-color: #ab47bc; color: #ab47bc; }
+.phase-bc { border-color: var(--gold); color: var(--gold); }
+.phase-buzzer { border-color: var(--danger); color: var(--danger); }
+
+/* ── Stats Grid ── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+.stat-box { text-align: center; padding: 1rem; }
+.stat-value { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+.stat-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); margin-top: 0.25rem; }
+
+/* ── Table ── */
+.blitz-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.blitz-table th {
+    text-align: left; padding: 0.6rem 0.75rem; font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);
+    border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.blitz-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
+.blitz-table tr:hover td { background: var(--bg-card-hover); }
+.blitz-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Status Pills ── */
+.pill {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px;
+    font-size: 0.75rem; font-weight: 600;
+}
+.pill-ok { background: rgba(102, 187, 106, 0.15); color: var(--success); }
+.pill-dazed { background: rgba(239, 83, 80, 0.15); color: var(--danger); }
+.pill-ball { background: rgba(255, 213, 79, 0.15); color: var(--gold); }
+.pill-blocked { background: rgba(171, 71, 188, 0.15); color: #ab47bc; }
+.pill-role { background: rgba(79, 195, 247, 0.1); color: var(--accent); }
+
+/* ── Play-by-Play ── */
+.pbp-feed { max-height: 500px; overflow-y: auto; }
+.pbp-entry {
+    padding: 0.4rem 0.75rem; border-bottom: 1px solid rgba(42, 48, 80, 0.5);
+    font-size: 0.85rem; line-height: 1.4;
+}
+.pbp-entry:hover { background: var(--bg-card-hover); }
+.pbp-flag { color: var(--danger); font-weight: 600; }
+.pbp-goal { color: var(--gold); font-weight: 600; }
+.pbp-save { color: var(--accent); font-weight: 600; }
+
+/* ── Upload Zone ── */
+.upload-zone {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 3rem;
+    text-align: center; color: var(--text-dim); cursor: pointer;
+    transition: all 0.2s;
+}
+.upload-zone:hover { border-color: var(--accent); color: var(--text); background: rgba(79, 195, 247, 0.03); }
+.upload-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.upload-text { font-size: 1rem; }
+.upload-hint { font-size: 0.8rem; margin-top: 0.5rem; }
+
+/* ── Ball Carrier Highlight ── */
+.ball-carrier { color: var(--gold); font-weight: 600; }
+
+/* ── Success Bar ── */
+.success-bar {
+    width: 60px; height: 6px; background: rgba(255,255,255,0.1);
+    border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 0.5rem;
+}
+.success-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.fill-high { background: var(--success); }
+.fill-mid { background: var(--warning); }
+.fill-low { background: var(--danger); }
+
+/* ── Button ── */
+.btn {
+    padding: 0.5rem 1.25rem; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-card); color: var(--text); cursor: pointer;
+    font-size: 0.85rem; font-weight: 500; transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-card-hover); border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: #29b6f6; }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: rgba(239,83,80,0.1); }
+
+/* ── Replay Transport ── */
+.replay-bar {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #0d1225, #151d35);
+    border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 1.5rem;
+}
+.replay-controls { display: flex; gap: 0.35rem; flex-shrink: 0; }
+.replay-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--bg-card); color: var(--text); cursor: pointer;
+    font-size: 0.9rem; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+}
+.replay-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--bg-card-hover); }
+.replay-btn:disabled { opacity: 0.3; cursor: default; }
+.replay-play { border-color: var(--success); color: var(--success); }
+.replay-play:hover:not(:disabled) { background: rgba(102,187,106,0.15); border-color: var(--success); color: var(--success); }
+.replay-pause { border-color: var(--warning); color: var(--warning); }
+
+.replay-progress { flex: 1; display: flex; align-items: center; gap: 0.75rem; }
+.replay-progress-bar {
+    flex: 1; height: 6px; background: rgba(255,255,255,0.08);
+    border-radius: 3px; overflow: hidden;
+}
+.replay-progress-fill {
+    height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), #29b6f6);
+    transition: width 0.2s ease;
+}
+.replay-counter {
+    font-size: 0.8rem; color: var(--text-dim);
+    font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 6ch; text-align: right;
+}
+
+.replay-speed { display: flex; gap: 0.25rem; flex-shrink: 0; }
+.speed-btn {
+    padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+    font-size: 0.75rem; font-weight: 600; transition: all 0.15s;
+}
+.speed-btn:hover { border-color: var(--accent); color: var(--text); }
+.speed-active { border-color: var(--accent); color: var(--accent); background: rgba(79,195,247,0.1); }
+
+/* ── Blitzsphere Field ── */
+.sphere-container {
+    padding: 0.5rem 0; margin-top: 0.5rem;
+}
+.blitzsphere-svg { width: 100%; margin: 0 auto; display: block; }
+
+/* ── Replay Layout (two-column) ── */
+.replay-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 1rem;
+    align-items: start;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+.replay-left { min-width: 0; }
+.replay-right {
+    display: flex; flex-direction: column; gap: 0.75rem;
+}
+/* Stack on small screens */
+@media (max-width: 1100px) {
+    .replay-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Tabs ── */
+.tab-bar {
+    display: flex; gap: 0; margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+.tab-btn {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-dim); padding: 0.4rem 1rem; font-size: 0.8rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    cursor: pointer; transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.lane-line { stroke: var(--border); stroke-width: 2; stroke-dasharray: 6 4; }
+
+.zone-circle {
+    fill: rgba(19, 24, 41, 0.9); stroke: var(--border); stroke-width: 2;
+    transition: fill 0.3s, stroke 0.3s;
+}
+.zone-goal { stroke: rgba(255, 213, 79, 0.4); }
+.zone-ball { stroke: var(--gold); stroke-width: 2.5; fill: rgba(255, 213, 79, 0.06); }
+
+.zone-label {
+    fill: var(--text-dim); font-size: 14px; font-weight: 700;
+    text-anchor: middle; dominant-baseline: auto; letter-spacing: 1px;
+}
+.zone-sublabel {
+    fill: rgba(136, 144, 168, 0.5); font-size: 7px; font-weight: 600;
+    text-anchor: middle; dominant-baseline: auto; letter-spacing: 1.5px; text-transform: uppercase;
+}
+
+.player-dot-home { fill: var(--accent); }
+.player-dot-away { fill: var(--gold); }
+
+.player-name {
+    font-size: 9px; font-weight: 500; dominant-baseline: auto;
+    transition: fill 0.2s;
+}
+.player-name-home { fill: var(--accent); }
+.player-name-away { fill: var(--gold); }
+.player-dazed { opacity: 0.5; text-decoration: line-through; }
+.player-has-ball { font-weight: 700; font-size: 10px; }
+.player-bc circle { filter: url(#glow); }
+
+/* Click-to-move */
+.player-clickable { cursor: pointer; }
+.player-clickable:hover text { filter: brightness(1.4); }
+.player-selected text { font-weight: 700 !important; }
+.player-selected circle { r: 6; stroke: #fff; stroke-width: 1.5; }
+.zone-target { stroke: rgba(255, 255, 255, 0.35) !important; stroke-dasharray: 4 3; }
+.zone-clickable:hover .zone-target { stroke: rgba(255, 255, 255, 0.7) !important; fill: rgba(255, 255, 255, 0.05); }
+.sphere-hint {
+    text-align: center; font-size: 0.75rem; color: var(--text-dim);
+    padding: 0.25rem 0; margin-top: -0.25rem;
+}
+
+.rush-gate-ring {
+    fill: none; stroke: var(--success); stroke-width: 2;
+    stroke-dasharray: 8 4; opacity: 0.6;
+    animation: rushPulse 2s ease-in-out infinite;
+}
+@keyframes rushPulse {
+    0%, 100% { opacity: 0.3; stroke-width: 2; }
+    50% { opacity: 0.7; stroke-width: 3; }
+}
+
+.sphere-legend {
+    text-align: center; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-dim);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend-swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+}
+.rush-swatch { border: 2px dashed var(--success); }
+
+/* ── Edit Select (inline dropdowns) ── */
+.edit-select {
+    background: var(--bg-dark); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.8rem;
+    cursor: pointer; outline: none; min-width: 90px;
+}
+.edit-select:hover { border-color: var(--accent); }
+.edit-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }

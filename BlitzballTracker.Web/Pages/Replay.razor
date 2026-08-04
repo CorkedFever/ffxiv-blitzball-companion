@@ -1,0 +1,402 @@
+@page "/replay"
+@inject BlitzballTracker.Web.Data.GameService Svc
+@implements IDisposable
+
+<PageTitle>Replay — EBL Blitzball Tracker</PageTitle>
+
+@if (!Svc.HasFile)
+{
+    <div class="card" style="text-align:center; padding: 3rem;">
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">No game loaded</div>
+        <div style="color: var(--text-dim);">Upload a log file from the <a href="/" style="color: var(--accent);">Dashboard</a> first, then come back here to watch it play out.</div>
+    </div>
+}
+else
+{
+    <!-- Transport Controls -->
+    <div class="replay-bar">
+        <div class="replay-controls">
+            @if (!Svc.IsReplaying || Svc.IsPaused)
+            {
+                <button class="replay-btn replay-play" @onclick="PlayReplay" disabled="@(Svc.ReplayIndex >= Svc.ReplayTotal)" title="Play">▶</button>
+            }
+            else
+            {
+                <button class="replay-btn replay-pause" @onclick="Svc.PauseReplay" title="Pause">⏸</button>
+            }
+            <button class="replay-btn" @onclick="StepOnce" disabled="@(Svc.IsReplaying && !Svc.IsPaused || Svc.ReplayIndex >= Svc.ReplayTotal)" title="Step forward">⏭</button>
+            <button class="replay-btn" @onclick="Svc.SkipToEnd" disabled="@(Svc.ReplayIndex >= Svc.ReplayTotal)" title="Skip to end">⏩</button>
+            <button class="replay-btn" @onclick="Svc.RestartReplay" title="Restart">🔄</button>
+        </div>
+
+        <div class="replay-progress">
+            <div class="replay-progress-bar">
+                <div class="replay-progress-fill" style="width: @ProgressPct"></div>
+            </div>
+            <span class="replay-counter">@Svc.ReplayIndex / @Svc.ReplayTotal</span>
+        </div>
+
+        <div class="replay-speed">
+            <button class="speed-btn @(Svc.ReplayDelayMs == 800 ? "speed-active" : "")" @onclick='() => Svc.ReplayDelayMs = 800'>0.5x</button>
+            <button class="speed-btn @(Svc.ReplayDelayMs == 400 ? "speed-active" : "")" @onclick='() => Svc.ReplayDelayMs = 400'>1x</button>
+            <button class="speed-btn @(Svc.ReplayDelayMs == 150 ? "speed-active" : "")" @onclick='() => Svc.ReplayDelayMs = 150'>2x</button>
+            <button class="speed-btn @(Svc.ReplayDelayMs == 50 ? "speed-active" : "")" @onclick='() => Svc.ReplayDelayMs = 50'>5x</button>
+        </div>
+    </div>
+
+    @if (Svc.ReplayIndex == 0 && !Svc.IsReplaying)
+    {
+        <div class="card" style="text-align:center; padding: 2rem; border-color: var(--accent);">
+            <div style="font-size: 1.2rem; margin-bottom: 0.5rem; color: var(--accent);">Ready to replay: @Svc.FileName</div>
+            <div style="color: var(--text-dim);">@Svc.ReplayTotal lines queued — hit ▶ to watch the game unfold</div>
+        </div>
+    }
+
+    <!-- Two-column layout: Field left, Panels right -->
+    <div class="replay-layout">
+        <!-- LEFT: Field Card -->
+        <div class="replay-left">
+            <div class="field-card">
+                <div class="scoreboard">
+                    <div class="team-name team-home">@HomeTeam</div>
+                    <div class="score-display">@Svc.Game.Score.Home : @Svc.Game.Score.Away</div>
+                    <div class="team-name team-away">@AwayTeam</div>
+                </div>
+
+                <div class="game-info">
+                    Set @Svc.Game.Set — Round @Svc.Game.Round
+                    <span class="phase-badge @PhaseClass">@PhaseName</span>
+                    @if (Svc.Game.BallCarrier != null)
+                    {
+                        <span> — Ball: <span class="ball-carrier">@Svc.Game.BallCarrier</span></span>
+                    }
+                </div>
+
+                <Blitzsphere />
+            </div>
+
+            <!-- Play-by-Play Feed -->
+            <div class="card">
+                <div class="card-title">Play-by-Play</div>
+                <div class="pbp-feed" style="max-height: 300px;">
+                    @foreach (var entry in Svc.Game.PlayByPlay.TakeLast(25).Reverse())
+                    {
+                        <div class="pbp-entry @EntryClass(entry)">@entry</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Tabbed Panel -->
+        <div class="replay-right">
+            @if (Svc.Game.Players.Count > 0)
+            {
+                <div class="card">
+                    <div class="tab-bar">
+                        <button class="tab-btn @(rightTab == "roster" ? "tab-active" : "")" @onclick='() => rightTab = "roster"'>Roster</button>
+                        <button class="tab-btn @(rightTab == "stats" ? "tab-active" : "")" @onclick='() => rightTab = "stats"'>Stats</button>
+                    </div>
+
+                    @if (rightTab == "roster")
+                    {
+                    <!-- Goal assignments -->
+                    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.75rem; font-size: 0.8rem;">
+                        <label style="color: var(--text-dim);">Goals:</label>
+                        <span>@HomeTeam →</span>
+                        <select class="edit-select" value="@Svc.Game.HomeGoalTarget" @onchange="SetHomeGoal">
+                            <option value="Four" selected="@(Svc.Game.HomeGoalTarget == BlitzballTracker.Core.GameState.Waymark.Four)">4</option>
+                            <option value="D" selected="@(Svc.Game.HomeGoalTarget == BlitzballTracker.Core.GameState.Waymark.D)">D</option>
+                        </select>
+                        <span>@AwayTeam →</span>
+                        <select class="edit-select" value="@Svc.Game.AwayGoalTarget" @onchange="SetAwayGoal">
+                            <option value="Four" selected="@(Svc.Game.AwayGoalTarget == BlitzballTracker.Core.GameState.Waymark.Four)">4</option>
+                            <option value="D" selected="@(Svc.Game.AwayGoalTarget == BlitzballTracker.Core.GameState.Waymark.D)">D</option>
+                        </select>
+                    </div>
+                    <table class="blitz-table" style="font-size: 0.8rem;">
+                        <thead>
+                            <tr>
+                                <th>Player</th>
+                                <th>Team</th>
+                                <th>Role</th>
+                                <th>Pos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in Svc.Game.Players.Values.OrderBy(p => p.Team).ThenBy(p => p.Name))
+                            {
+                                <tr>
+                                    <td style="font-size: 0.75rem;">@p.Name</td>
+                                    <td>
+                                        <select class="edit-select" value="@p.Team" @onchange="e => SetTeam(p, e)">
+                                            <option value="" selected="@(string.IsNullOrEmpty(p.Team))">—</option>
+                                            @if (!string.IsNullOrEmpty(Svc.Game.HomeTeam))
+                                            {
+                                                <option value="@Svc.Game.HomeTeam" selected="@(p.Team == Svc.Game.HomeTeam)">@Svc.Game.HomeTeam</option>
+                                            }
+                                            @if (!string.IsNullOrEmpty(Svc.Game.AwayTeam))
+                                            {
+                                                <option value="@Svc.Game.AwayTeam" selected="@(p.Team == Svc.Game.AwayTeam)">@Svc.Game.AwayTeam</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="edit-select" value="@p.Role" @onchange="e => SetRole(p, e)">
+                                            @foreach (var role in AllRoles)
+                                            {
+                                                <option value="@role" selected="@(p.Role == role)">@RoleLabel(role)</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="edit-select" value="@p.Position" @onchange="e => SetPosition(p, e)">
+                                            @foreach (var wm in AllWaymarks)
+                                            {
+                                                <option value="@wm" selected="@(p.Position == wm)">@WaymarkShort(wm)</option>
+                                            }
+                                        </select>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="replay-btn" @onclick="RecalcPositions" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">🔄 Reset Pos</button>
+                        <button class="replay-btn" @onclick="RemoveUnknownPlayers" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">🗑 Remove Unknown</button>
+                    </div>
+                    }
+                    else
+                    {
+                    <table class="blitz-table" style="font-size: 0.8rem;">
+                        <thead>
+                            <tr>
+                                <th>Player</th>
+                                <th>Role</th>
+                                <th class="num">Act</th>
+                                <th class="num">%</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in Svc.Game.Players.Values.OrderByDescending(p => p.ActionsAttempted))
+                            {
+                                <tr>
+                                    <td style="font-size: 0.75rem;">
+                                        @if (p.HasBall) { <span title="Ball Carrier">🏐</span> }
+                                        @p.Name
+                                    </td>
+                                    <td><span class="pill pill-role">@RoleLabel(p.Role)</span></td>
+                                    <td class="num">@(p.ActionsAttempted > 0 ? $"{p.ActionsSucceeded}/{p.ActionsAttempted}" : "—")</td>
+                                    <td class="num">
+                                        @if (p.ActionsAttempted > 0) { @($"{p.SuccessRate:P0}") }
+                                        else { <span>—</span> }
+                                    </td>
+                                    <td>@StatusPill(p)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Svc.LastRawLine))
+    {
+        <div class="card" style="border-color: var(--border); opacity: 0.6;">
+            <div class="card-title">Last Parsed Line</div>
+            <div style="font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.8rem; color: var(--text-dim); word-break: break-all;">@Svc.LastRawLine</div>
+        </div>
+    }
+
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Svc.OnStateChanged += HandleStateChanged;
+
+        // Auto-prepare replay if file is loaded but replay not yet initialized
+        if (Svc.HasFile && !Svc.HasReplayData)
+            Svc.RestartReplay();
+    }
+
+    public void Dispose()
+    {
+        Svc.OnStateChanged -= HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PlayReplay()
+    {
+        await Svc.StartReplay();
+    }
+
+    private void StepOnce()
+    {
+        Svc.StepForward();
+    }
+
+    private string ProgressPct =>
+        Svc.ReplayTotal > 0 ? $"{(double)Svc.ReplayIndex / Svc.ReplayTotal * 100:F1}%" : "0%";
+
+    private string HomeTeam => string.IsNullOrEmpty(Svc.Game.HomeTeam) ? "HOME" : Svc.Game.HomeTeam;
+    private string AwayTeam => string.IsNullOrEmpty(Svc.Game.AwayTeam) ? "AWAY" : Svc.Game.AwayTeam;
+
+    private string PhaseName => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "Outer Phase",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "Inner Phase",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "Ball Carrier",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "BUZZER",
+        BlitzballTracker.Core.GameState.GamePhase.Blitzoff => "Blitzoff",
+        _ => Svc.Game.Phase.ToString(),
+    };
+
+    private string PhaseClass => Svc.Game.Phase switch
+    {
+        BlitzballTracker.Core.GameState.GamePhase.OuterPhase => "phase-outer",
+        BlitzballTracker.Core.GameState.GamePhase.InnerPhase => "phase-inner",
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierOuter or
+        BlitzballTracker.Core.GameState.GamePhase.BallCarrierInner => "phase-bc",
+        BlitzballTracker.Core.GameState.GamePhase.BuzzerPhase => "phase-buzzer",
+        _ => "",
+    };
+
+    private static string RoleLabel(BlitzballTracker.Core.GameState.PlayerRole role) => role switch
+    {
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield => "M",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward => "LF",
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward => "RF",
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender => "LD",
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender => "RD",
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper => "GK",
+        _ => "—",
+    };
+
+    private static RenderFragment StatusPill(BlitzballTracker.Core.GameState.PlayerState p) => builder =>
+    {
+        if (p.HasBall) { builder.AddMarkupContent(0, "<span class='pill pill-ball'>BALL</span>"); }
+        else if (p.IsDazed) { builder.AddMarkupContent(0, "<span class='pill pill-dazed'>DAZED</span>"); }
+        else if (p.IsBlocked) { builder.AddMarkupContent(0, "<span class='pill pill-blocked'>BLOCKED</span>"); }
+        else { builder.AddMarkupContent(0, "<span class='pill pill-ok'>OK</span>"); }
+    };
+
+    private static string EntryClass(string entry) =>
+        entry.Contains("FLAG") ? "pbp-flag" :
+        entry.Contains("GOAL") ? "pbp-goal" :
+        entry.Contains("SAVE") ? "pbp-save" :
+        entry.Contains("DAZED") ? "pbp-flag" :
+        entry.Contains("BLITZOFF") ? "pbp-goal" : "";
+
+    // ── Player Editor ──
+    private string rightTab = "roster";
+
+    private static readonly BlitzballTracker.Core.GameState.PlayerRole[] AllRoles =
+    [
+        BlitzballTracker.Core.GameState.PlayerRole.None,
+        BlitzballTracker.Core.GameState.PlayerRole.Goalkeeper,
+        BlitzballTracker.Core.GameState.PlayerRole.Midfield,
+        BlitzballTracker.Core.GameState.PlayerRole.LeftForward,
+        BlitzballTracker.Core.GameState.PlayerRole.RightForward,
+        BlitzballTracker.Core.GameState.PlayerRole.LeftDefender,
+        BlitzballTracker.Core.GameState.PlayerRole.RightDefender,
+    ];
+
+    private static readonly BlitzballTracker.Core.GameState.Waymark[] AllWaymarks =
+    [
+        BlitzballTracker.Core.GameState.Waymark.None,
+        BlitzballTracker.Core.GameState.Waymark.D,
+        BlitzballTracker.Core.GameState.Waymark.One,
+        BlitzballTracker.Core.GameState.Waymark.A,
+        BlitzballTracker.Core.GameState.Waymark.C,
+        BlitzballTracker.Core.GameState.Waymark.Two,
+        BlitzballTracker.Core.GameState.Waymark.B,
+        BlitzballTracker.Core.GameState.Waymark.Four,
+    ];
+
+    private void SetRole(BlitzballTracker.Core.GameState.PlayerState p, ChangeEventArgs e)
+    {
+        if (Enum.TryParse<BlitzballTracker.Core.GameState.PlayerRole>(e.Value?.ToString(), out var role))
+            p.Role = role;
+        Svc.NotifyStateChanged();
+    }
+
+    private void SetPosition(BlitzballTracker.Core.GameState.PlayerState p, ChangeEventArgs e)
+    {
+        if (Enum.TryParse<BlitzballTracker.Core.GameState.Waymark>(e.Value?.ToString(), out var wm))
+            p.Position = wm;
+        Svc.NotifyStateChanged();
+    }
+
+    private void SetTeam(BlitzballTracker.Core.GameState.PlayerState p, ChangeEventArgs e)
+    {
+        p.Team = e.Value?.ToString() ?? "";
+        Svc.NotifyStateChanged();
+    }
+
+    private void RecalcPositions()
+    {
+        Svc.Game.ResetPositions();
+        Svc.NotifyStateChanged();
+    }
+
+    private void SetHomeGoal(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<BlitzballTracker.Core.GameState.Waymark>(e.Value?.ToString(), out var wm))
+            Svc.Game.HomeGoalTarget = wm;
+        Svc.Game.ResetPositions();
+        Svc.NotifyStateChanged();
+    }
+
+    private void SetAwayGoal(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<BlitzballTracker.Core.GameState.Waymark>(e.Value?.ToString(), out var wm))
+            Svc.Game.AwayGoalTarget = wm;
+        Svc.Game.ResetPositions();
+        Svc.NotifyStateChanged();
+    }
+
+    private void RemoveUnknownPlayers()
+    {
+        var toRemove = Svc.Game.Players.Values
+            .Where(p => string.IsNullOrEmpty(p.Team) && p.Role == BlitzballTracker.Core.GameState.PlayerRole.None)
+            .Select(p => p.Name)
+            .ToList();
+        foreach (var name in toRemove)
+            Svc.Game.Players.Remove(name);
+        Svc.NotifyStateChanged();
+    }
+
+    private static string WaymarkOptionLabel(BlitzballTracker.Core.GameState.Waymark wm) => wm switch
+    {
+        BlitzballTracker.Core.GameState.Waymark.None => "— None —",
+        BlitzballTracker.Core.GameState.Waymark.D => "D (Goal)",
+        BlitzballTracker.Core.GameState.Waymark.One => "1 (Strike)",
+        BlitzballTracker.Core.GameState.Waymark.A => "A (Strike)",
+        BlitzballTracker.Core.GameState.Waymark.C => "C (Center)",
+        BlitzballTracker.Core.GameState.Waymark.Two => "2 (Strike)",
+        BlitzballTracker.Core.GameState.Waymark.B => "B (Strike)",
+        BlitzballTracker.Core.GameState.Waymark.Four => "4 (Goal)",
+        _ => wm.ToString(),
+    };
+
+    private static string WaymarkShort(BlitzballTracker.Core.GameState.Waymark wm) => wm switch
+    {
+        BlitzballTracker.Core.GameState.Waymark.None => "—",
+        BlitzballTracker.Core.GameState.Waymark.D => "D",
+        BlitzballTracker.Core.GameState.Waymark.One => "1",
+        BlitzballTracker.Core.GameState.Waymark.A => "A",
+        BlitzballTracker.Core.GameState.Waymark.C => "C",
+        BlitzballTracker.Core.GameState.Waymark.Two => "2",
+        BlitzballTracker.Core.GameState.Waymark.B => "B",
+        BlitzballTracker.Core.GameState.Waymark.Four => "4",
+        _ => wm.ToString(),
+    };
+}

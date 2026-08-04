@@ -1,0 +1,60 @@
+@page "/log"
+@inject BlitzballTracker.Web.Data.GameService Svc
+
+<PageTitle>Play-by-Play — EBL Blitzball Tracker</PageTitle>
+
+@if (Svc.Game.PlayByPlay.Count == 0)
+{
+    <div class="card" style="text-align:center; padding: 3rem;">
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">No game loaded</div>
+        <div style="color: var(--text-dim);">Upload a log file from the <a href="/" style="color: var(--accent);">Dashboard</a> to see the play-by-play.</div>
+    </div>
+}
+else
+{
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">
+                @Svc.Game.PlayByPlay.Count entries
+                @if (!string.IsNullOrEmpty(Svc.FileName))
+                {
+                    <span> — @Svc.FileName</span>
+                }
+            </span>
+        </div>
+        <div>
+            <button class="btn @(showAll ? "" : "btn-primary")" @onclick="() => showAll = !showAll">
+                @(showAll ? "Show Recent" : "Show All")
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Play-by-Play</div>
+        <div class="pbp-feed" style="@(showAll ? "max-height: none;" : "")">
+            @foreach (var entry in DisplayEntries())
+            {
+                <div class="pbp-entry @EntryClass(entry)">@entry</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool showAll = false;
+
+    private IEnumerable<string> DisplayEntries()
+    {
+        var entries = Svc.Game.PlayByPlay;
+        if (!showAll && entries.Count > 50)
+            entries = entries.Skip(entries.Count - 50).ToList();
+        return entries;
+    }
+
+    private static string EntryClass(string entry) =>
+        entry.Contains("FLAG") ? "pbp-flag" :
+        entry.Contains("GOAL") ? "pbp-goal" :
+        entry.Contains("SAVE") ? "pbp-save" :
+        entry.Contains("DAZED") ? "pbp-flag" :
+        entry.Contains("BLITZOFF") ? "pbp-goal" : "";
+}

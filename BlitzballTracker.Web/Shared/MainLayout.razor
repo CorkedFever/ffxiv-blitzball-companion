@@ -1,0 +1,23 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>EBL Blitzball Tracker</PageTitle>
+
+<div class="app-container">
+    <header class="top-bar">
+        <div class="brand">
+            <span class="brand-icon">⚡</span>
+            <span class="brand-text">EBL Blitzball Tracker</span>
+        </div>
+        <nav class="top-nav">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink class="nav-link" href="stats">Stats</NavLink>
+            <NavLink class="nav-link" href="log">Play-by-Play</NavLink>
+            <NavLink class="nav-link" href="replay">Replay</NavLink>
+            <NavLink class="nav-link" href="live">Live</NavLink>
+        </nav>
+    </header>
+
+    <main class="content">
+        @Body
+    </main>
+</div>
