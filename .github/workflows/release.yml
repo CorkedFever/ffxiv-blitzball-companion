@@ -1,0 +1,107 @@
+name: Release
+
+# Cutting a release is `git tag v0.3.0 && git push --tags`. Everything below follows
+# from the tag: the version in the built plugin, the release, and the entry in
+# pluginmaster.json that Dalamud reads.
+on:
+  push:
+    tags: [ 'v*' ]
+
+  # Useful for re-running a release that failed partway without moving the tag.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 0.3.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The plugin targets net9.0-windows, so this cannot run on Linux.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the branch rather than the detached tag: the manifest bump at
+          # the end is committed back, and a detached HEAD has nowhere to push it.
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # 8 for Core, the tests and the web app; 9 for the plugin itself.
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ github.event.inputs.version }}'
+          } else {
+            '${{ github.ref_name }}' -replace '^v', ''
+          }
+
+          # Dalamud wants four parts in AssemblyVersion.
+          $assembly = $version
+          while (($assembly -split '\.').Count -lt 4) { $assembly += '.0' }
+
+          "version=$version"   >> $env:GITHUB_OUTPUT
+          "assembly=$assembly" >> $env:GITHUB_OUTPUT
+
+          Write-Host "Releasing $version (assembly $assembly)"
+
+      # A release that fails its own test suite is not a release.
+      - name: Test
+        run: dotnet test BlitzballTracker.sln -c Release --nologo
+
+      - name: Build the plugin
+        run: >
+          dotnet build BlitzballTracker/BlitzballTracker.csproj
+          -c Release --nologo
+          -p:Version=${{ steps.version.outputs.assembly }}
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Blitzball Companion ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: BlitzballTracker/bin/Release/BlitzballTracker/latest.zip
+
+      # Dalamud only ever reads pluginmaster.json, so a release nobody can install is
+      # one where this step did not run. LastUpdate is a unix timestamp; the installer
+      # uses it to decide what is new.
+      - name: Point the plugin repository at it
+        shell: pwsh
+        run: |
+          $path = 'pluginmaster.json'
+          $manifest = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+
+          foreach ($entry in $manifest) {
+            $entry.AssemblyVersion = '${{ steps.version.outputs.assembly }}'
+            $entry.LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
+          }
+
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path -Encoding utf8
+
+      - name: Commit the manifest
+        shell: pwsh
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          git add pluginmaster.json
+
+          if (git diff --cached --quiet) {
+            Write-Host 'Manifest unchanged; nothing to commit.'
+            exit 0
+          }
+
+          git commit -m "Release ${{ steps.version.outputs.version }}"
+          git push origin main

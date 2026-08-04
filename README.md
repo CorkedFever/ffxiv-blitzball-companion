@@ -44,11 +44,24 @@ event to attend.
 
 Requires Dalamud (API 15).
 
-1. In-game: **Dalamud Settings → Experimental → Dev Plugin Locations**
-2. Add the folder containing the built `BlitzballTracker.dll`
+Add this to **Dalamud Settings → Experimental → Custom Plugin Repositories**:
+
+```
+https://raw.githubusercontent.com/CorkedFever/ffxiv-blitzball-companion/main/pluginmaster.json
+```
+
+Save, then install **Blitzball Companion** from the plugin installer like any other
+plugin. Open it with `/blitz`.
+
+<details>
+<summary>Running it from source instead</summary>
+
+1. `dotnet build BlitzballTracker.sln -c Release`
+2. **Dalamud Settings → Experimental → Dev Plugin Locations**, add the folder holding
+   the built `BlitzballTracker.dll`
 3. **Dev Tools → Installed Dev Plugins → BlitzballTracker → Enable**
 
-Open it with `/blitz`.
+</details>
 
 ### Before a match
 
@@ -71,6 +84,17 @@ dotnet test BlitzballTracker.sln -c Release
 
 The plugin targets `net9.0-windows` via `Dalamud.NET.Sdk/15.0.0`; everything else is
 `net8.0`.
+
+### Releasing
+
+```bash
+git tag v0.3.0 && git push --tags
+```
+
+That is the whole process. The workflow runs the tests, builds Release at that version,
+attaches `latest.zip` to a GitHub release, and updates `pluginmaster.json` — which is the
+only file Dalamud reads, so a release where that step did not run is one nobody can
+install.
 
 ### Chat logs are not in the repository
 
