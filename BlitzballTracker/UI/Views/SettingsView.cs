@@ -237,7 +237,15 @@ public sealed class SettingsView(
             if (ImGui.Button("Start feed", new Vector2(150, 0)))
             {
                 _liveFeed.Start(_liveUrl.Trim().Length == 0 ? null : _liveUrl.Trim());
-                _status = $"Live feed started: {_liveFeed.BaseUrl}";
+
+                // Send the lineup straight away. Without it the far end recognises
+                // nobody, and the failure is silent: phases and score tick over while
+                // the field stays empty.
+                _liveFeed.SendRoster(_state.CurrentRoster);
+
+                _status = _state.HasRoster
+                    ? $"Live feed started: {_liveFeed.BaseUrl}"
+                    : $"Live feed started: {_liveFeed.BaseUrl} — no roster loaded yet, so the feed cannot track players.";
             }
         }
     }

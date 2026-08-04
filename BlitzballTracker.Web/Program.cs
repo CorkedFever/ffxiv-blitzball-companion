@@ -1,3 +1,4 @@
+using BlitzballTracker.Core.Parsing;
 using BlitzballTracker.Web.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -56,42 +57,31 @@ app.MapGet("/api/live/status", (LiveService svc) =>
     });
 });
 
-app.MapPost("/api/live/roster", (RosterSetup roster, LiveService svc) =>
+// The lineup the plugin is tracking with, in the same header format recordings use.
+//
+// Sharing that format rather than inventing a DTO means one parser and one set of
+// rules on both sides. The previous version built PlayerState objects by hand and
+// never set CurrentRoster — which is what ChatParser keys its name index off, so the
+// index was never built and every player name in the feed was discarded. Phases and
+// the scoreboard worked, the field stayed empty, and it looked like a rendering fault.
+app.MapPost("/api/live/roster", async (HttpRequest request, LiveService svc) =>
 {
-    // Set teams
-    if (!string.IsNullOrEmpty(roster.HomeTeam)) svc.Game.HomeTeam = roster.HomeTeam;
-    if (!string.IsNullOrEmpty(roster.AwayTeam)) svc.Game.AwayTeam = roster.AwayTeam;
+    using var reader = new StreamReader(request.Body);
+    var header = await reader.ReadToEndAsync();
 
-    // Set goal assignments (determines all player positions)
-    if (Enum.TryParse<BlitzballTracker.Core.GameState.Waymark>(roster.HomeGoal, true, out var hg))
-        svc.Game.HomeGoalTarget = hg;
-    if (Enum.TryParse<BlitzballTracker.Core.GameState.Waymark>(roster.AwayGoal, true, out var ag))
-        svc.Game.AwayGoalTarget = ag;
+    var roster = RosterHeader.Read(header.Split('\n'));
 
-    // Add/update players
-    if (roster.Players != null)
+    if (roster is null)
+        return Results.BadRequest("No roster found in the payload.");
+
+    svc.ApplyRoster(roster);
+
+    return Results.Ok(new
     {
-        foreach (var rp in roster.Players)
-        {
-            if (string.IsNullOrEmpty(rp.Name)) continue;
-
-            if (!svc.Game.Players.TryGetValue(rp.Name, out var player))
-            {
-                player = new BlitzballTracker.Core.GameState.PlayerState { Name = rp.Name };
-                svc.Game.Players[rp.Name] = player;
-            }
-
-            if (!string.IsNullOrEmpty(rp.Team)) player.Team = rp.Team;
-            if (Enum.TryParse<BlitzballTracker.Core.GameState.PlayerRole>(rp.Role, true, out var role))
-                player.Role = role;
-        }
-    }
-
-    // Recalculate starting positions based on roles + goal assignments
-    svc.Game.ResetPositions();
-    svc.NotifyStateChanged();
-
-    return Results.Ok(new { players = svc.Game.Players.Count, home = svc.Game.HomeTeam, away = svc.Game.AwayTeam });
+        players = svc.Game.Players.Count,
+        home = svc.Game.HomeTeam,
+        away = svc.Game.AwayTeam,
+    });
 });
 
 app.MapBlazorHub();
@@ -101,13 +91,3 @@ app.Run();
 
 /// <summary>DTO for live chat messages from the plugin.</summary>
 public record LiveChatMessage(string? Sender, string? Message, DateTime Timestamp);
-
-/// <summary>DTO for roster setup — teams, goals, and player assignments.</summary>
-public record RosterSetup(
-    string? HomeTeam,
-    string? AwayTeam,
-    string? HomeGoal,  // e.g. "Four" or "D"
-    string? AwayGoal,
-    RosterPlayer[]? Players);
-
-public record RosterPlayer(string? Name, string? Team, string? Role);

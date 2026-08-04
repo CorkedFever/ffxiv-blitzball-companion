@@ -52,18 +52,22 @@ public sealed class RosterView : IShellView
         ? _parser.UnmatchedNames.Count.ToString()
         : null;
 
+    private readonly LiveFeedClient _liveFeed;
+
     public RosterView(
         BlitzGame state,
         Configuration config,
         IDalamudPluginInterface pluginInterface,
         WaymarkReader waymarks,
-        ChatParser parser)
+        ChatParser parser,
+        LiveFeedClient liveFeed)
     {
         _state = state;
         _config = config;
         _pluginInterface = pluginInterface;
         _waymarks = waymarks;
         _parser = parser;
+        _liveFeed = liveFeed;
 
         _draft = (_config.LastRoster ?? new Roster()).Clone();
         EnsureSlots();
@@ -415,6 +419,10 @@ public sealed class RosterView : IShellView
 
         _state.ApplyRoster(applied);
         _parser.ClearUnmatchedNames();
+
+        // Keep the broadcast in step. A substitution mid-match is exactly when the
+        // overlay would otherwise start dropping a player's actions on the floor.
+        _liveFeed.SendRoster(applied);
 
         _config.LastRoster = applied;
         _pluginInterface.SavePluginConfig(_config);

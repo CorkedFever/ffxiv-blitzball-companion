@@ -5,23 +5,22 @@ broadcasters use, not just players.
 
 ---
 
-## Known defect: the live feed has no roster
+## ~~Known defect: the live feed has no roster~~ — FIXED
 
-**This blocks the stream overlay and is a bug today.**
+`LiveFeedClient.SendRoster` posts the lineup as the same header format recordings use,
+and the far end rebuilds it through `BlitzGame.ApplyRoster`. Sent when the feed starts
+and again whenever the roster is applied, so a substitution mid-match keeps the
+broadcast in step.
 
-`LiveFeedClient` posts raw chat lines to the web app, which re-parses them through its
-own `ChatParser`. But `LiveService` constructs a bare `BlitzGame` with no roster.
+Two things were wrong, not one. The plugin never sent a roster at all — and the
+endpoint that existed to receive one built `PlayerState` objects by hand from a bespoke
+DTO, never setting `CurrentRoster`. That is what `ChatParser` keys its name index off,
+so the index was never built and every player name was discarded regardless. Phases and
+the scoreboard worked while the field stayed empty, which reads as a rendering fault.
 
-The parser is roster-gated by design: with no roster it rejects every player name.
-So the web app currently shows phases and the scoreboard while the field stays empty
-and possession never resolves — the same failure the plugin had before roster support
-landed.
-
-**Fix:** send the roster with the feed. Either a `POST /api/live/roster` when the feed
-starts and whenever the roster changes, or embed it in the first payload.
-`RosterHeader` already serialises a roster to text for recordings and could carry it.
-
-Worth doing regardless of which feature comes first.
+Sharing `RosterHeader` rather than a parallel DTO means one format and one parser on
+both sides. `LiveFeedRosterTests` covers the round trip, and pins the specific trap:
+a full `Players` dictionary with no `CurrentRoster` still recognises nobody.
 
 ---
 
@@ -37,7 +36,7 @@ For broadcasting matches on Twitch. The Blazor app already has `LiveService`,
 - Should degrade gracefully when the feed stalls — a frozen overlay on stream is
   worse than one that says it lost the feed.
 
-Depends on the roster fix above.
+No longer blocked: the roster now reaches the web app, so the field renders.
 
 ## Play designer for coaches
 

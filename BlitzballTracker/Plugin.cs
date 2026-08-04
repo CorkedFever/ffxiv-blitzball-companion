@@ -88,7 +88,7 @@ public sealed class Plugin : IDalamudPlugin
         IShellView[] views =
         [
             new MatchView(_gameState, _recorder, _liveFeed, _driver),
-            new RosterView(_gameState, _config, _pluginInterface, _waymarks, _parser),
+            new RosterView(_gameState, _config, _pluginInterface, _waymarks, _parser, _liveFeed),
             new StatsView(_gameState),
             new LabView(_driver, _gameState, _waymarks, _config),
             new SettingsView(_gameState, _config, _pluginInterface, _recorder, _liveFeed, recordings),
