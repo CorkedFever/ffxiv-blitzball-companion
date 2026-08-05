@@ -582,6 +582,7 @@ public partial class ChatParser
         foreach (var player in _state.Players.Values)
         {
             player.PhaseRoll = null;
+            player.RalliedRoll = null;
             player.HasGateMove = false;
             player.IsStandby = false;
         }
@@ -955,6 +956,14 @@ public partial class ChatParser
                 continue;
             }
 
+            // Rally is not opposed by anyone — it measures the midfielder against the
+            // team-mate they are lending to.
+            if (action.Action == ActionType.Rally)
+            {
+                ResolveRally(action);
+                continue;
+            }
+
             if (!isActor && !isTarget) continue;
 
             if (action.TargetName == null) continue;
@@ -1313,18 +1322,71 @@ public partial class ChatParser
     }
 
     /// <summary>
-    /// The team-mate a rally is lending its roll to, or null if there is nobody.
+    /// Lend the midfielder's roll to the team-mate they named.
     ///
-    /// Rally reaches players in the midfielder's own zone. Zone rather than waymark, so
-    /// a midfielder on 1 can rally a forward on A — the deck's own example.
+    /// The rally beats their team-mate's own roll or it does nothing: "if your roll is
+    /// higher than your team member's, they now use your roll in place of their own"
+    /// (slide 56). It lasts the phase and no longer.
+    ///
+    /// Compared on the raw rolls both made. Reading them back through the rallied value
+    /// would let a rally measure itself against its own result.
     /// </summary>
-    private PlayerState? RallyTargetOf(PlayerState player, ActionEvent evt)
+    private void ResolveRally(ActionEvent action)
     {
-        if (evt.TargetName is { } named && _state.Players.TryGetValue(named, out var chosen))
-            return chosen;
+        if (action.TargetName is not { } targetName) return;
 
+        var midfielder = _state.Players.GetValueOrDefault(action.PlayerName);
+        var mate = _state.Players.GetValueOrDefault(targetName);
+
+        if (midfielder?.PhaseRoll is not { } rallyRoll) return;
+        if (mate?.PhaseRoll is not { } ownRoll) return;
+
+        action.Applied = new AppliedEffects();
+
+        if (rallyRoll <= ownRoll)
+        {
+            action.Outcome = ActionOutcome.Fail;
+
+            _state.PlayByPlay.Add(
+                $"{midfielder.Name} rallies {mate.Name}, but {rallyRoll} does not beat " +
+                $"their own {ownRoll} — nothing changes.");
+            return;
+        }
+
+        mate.RalliedRoll = rallyRoll;
+
+        // Settled before the sweep below, and deliberately so: that sweep reopens
+        // everything involving this player, and the rally is one of those. Left pending
+        // it would be picked up and resolved again, forever.
+        action.Outcome = ActionOutcome.Success;
+        midfielder.ActionsSucceeded++;
+        action.Applied.ActorSucceeded = true;
+
+        _state.PlayByPlay.Add(
+            $"{midfielder.Name} rallies {mate.Name} — they take {rallyRoll} in place of " +
+            $"their own {ownRoll} for the phase.");
+
+        // Contests this player was in may already have been settled on the roll they
+        // are no longer using, so they are undone and re-decided — the same machinery
+        // a referee's re-roll goes through, for the same reason.
+        ReopenActionsInvolving(mate, clearActorRoll: false);
+        action.Outcome = ActionOutcome.Success;
+
+        ResolveOpposedActions(mate.Name);
+    }
+
+    /// <summary>
+    /// Whether anyone is in reach of a rally at all.
+    ///
+    /// The midfielder names who they are rallying — it is never inferred — so this only
+    /// answers whether a legal target exists, which is what decides the conversion to
+    /// SURVEY. Reach is the midfielder's own zone. Zone rather than waymark, so a
+    /// midfielder on 1 can rally a forward on A, which is the deck's own example.
+    /// </summary>
+    private bool HasRallyTarget(PlayerState player)
+    {
         var zone = BlitzGame.ZoneRank(player.Position);
-        if (zone < 0) return null;
+        if (zone < 0) return false;
 
         foreach (var mate in _state.Players.Values)
         {
@@ -1332,10 +1394,10 @@ public partial class ChatParser
             if (!mate.Team.Equals(player.Team, StringComparison.OrdinalIgnoreCase)) continue;
             if (BlitzGame.ZoneRank(mate.Position) != zone) continue;
 
-            return mate;
+            return true;
         }
 
-        return null;
+        return false;
     }
 
     /// <summary>
@@ -2116,9 +2178,17 @@ public partial class ChatParser
         return null;
     }
 
+    /// <summary>
+    /// The roll a player is standing on, which is not always the one they made.
+    ///
+    /// A rallied player uses their midfielder's roll in place of their own for the
+    /// phase, so everything that compares rolls has to come through here.
+    /// </summary>
     private int? GetPlayerPhaseRoll(string playerName)
     {
-        return _state.Players.TryGetValue(playerName, out var p) ? p.PhaseRoll : null;
+        if (!_state.Players.TryGetValue(playerName, out var p)) return null;
+
+        return p.RalliedRoll ?? p.PhaseRoll;
     }
 
     /// <summary>
@@ -2365,6 +2435,22 @@ public partial class ChatParser
 
                     if (_state.Players.TryGetValue(evt.TargetName, out var blocked))
                         blocked.IsBlocked = true;
+
+                    // Blocking a blocker negates what they were doing — a held team-mate
+                    // is freed. Block battles are how a side gets its carrier moving
+                    // again, and the counter-blocked player can no longer contest them.
+                    var freed = _state.CancelBlocksBy(evt.TargetName);
+
+                    if (freed.Count > 0)
+                    {
+                        _state.PlayByPlay.Add(
+                            $"[{timestamp:HH:mm:ss}] {player.Name} blocks the blocker — " +
+                            $"{evt.TargetName} can no longer hold {string.Join(", ", freed)}.");
+                    }
+
+                    // Both players end up in the blocked state (slide 44): getting in
+                    // somebody's way costs you your own freedom to move.
+                    player.IsBlocked = true;
                 }
                 else
                 {
@@ -2508,10 +2594,10 @@ public partial class ChatParser
                 break;
 
             case ActionType.Rally:
-                // Rally lends the midfielder's roll to a team-mate in their own zone.
-                // With nobody to lend it to there is nothing to resolve, and the deck
-                // says the action becomes a SURVEY rather than being lost (slide 56).
-                if (RallyTargetOf(player, evt) is null)
+                // Rally lends the midfielder's roll to a team-mate they name in their
+                // own zone. With nobody in reach there is nothing to lend it to, and
+                // the action becomes a SURVEY rather than being lost (slide 56).
+                if (!HasRallyTarget(player))
                 {
                     ConvertAction(evt, player, ActionType.Survey,
                         "no team-mate in their zone to rally", timestamp);

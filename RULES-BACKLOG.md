@@ -415,12 +415,23 @@ per the first version. Worth confirming.
   only converts when a waymark was named too: one with neither target nor destination
   is an unparsed post, and inventing a move from it would be worse than leaving it.
   Shove with no legal target is simply lost.
-- Survey can also be **cancelled by a successful Survey**, and **stops a Rush** before
-  it happens (slide 48). Neither is modelled — Rush contests are not either.
-- A successful Block **completely negates** the target's action, which is why a Block
-  can cancel another Block (slide 44). Also unmodelled: a block puts **both** players
-  in the BLOCKED state, and a blocked player receiving the ball forces an opposed roll
-  where the winner catches it whoever it was meant for.
-- **RALLY itself is still not resolved** (slide 56). The midfielder lends their roll to
-  a team-mate in their zone when it beats theirs, and it lasts only that phase. The
-  no-target conversion above is in; the lending is not.
+- **Surveys do not cancel surveys.** Confirmed Aug 2026 — an earlier note here said
+  they did, and that was wrong. A survey **can stop a RUSH** going past the surveyor,
+  which is still unmodelled because Rush contests are not modelled either.
+- **DONE** — **block battles** (slide 44). Blocking a blocker negates what they were
+  doing and frees whoever they were holding, which is how a side gets its carrier
+  moving again. A counter-blocked player can no longer contest the carrier. Blocking
+  also leaves **both** players in the BLOCKED state: getting in somebody's way costs
+  you your own freedom to move.
+- Still unmodelled from slide 44: a blocked player *receiving the ball* forces an
+  opposed roll where the winner catches it whoever it was meant for.
+- **DONE** — **RALLY** (slide 56). The midfielder names a team-mate in their own zone
+  and lends them their roll when it beats the one that team-mate made;
+  `PlayerState.RalliedRoll` holds it and `GetPlayerPhaseRoll` returns it in preference,
+  so everything comparing rolls sees the lent one. It expires with the phase.
+
+  Two traps worth remembering. The comparison uses the **raw** rolls, or a rally would
+  measure itself against its own result. And a successful rally reopens the contests
+  that player was already in — settled on a roll they are no longer using — which means
+  the rally's own outcome has to be fixed *before* that sweep runs, or the sweep reopens
+  the rally and it resolves forever.

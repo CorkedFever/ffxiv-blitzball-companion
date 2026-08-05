@@ -46,6 +46,54 @@ public class BlockContestTests
         Assert.True(carrier.IsBlocked);
     }
 
+    /// <summary>
+    /// Block battles: blocking a blocker negates what they were doing, which is how a
+    /// side frees a held ball carrier. The counter-blocked player can no longer contest
+    /// the carrier at all.
+    /// </summary>
+    [Fact]
+    public void BlockingABlockerFreesWhoTheyWereHolding()
+    {
+        var (game, parser) = NewGame();
+        var now = DateTime.Now;
+
+        var carrier = Named(game, "SIM RED", PlayerRole.Midfield);
+        var blocker = Named(game, "SIM GOLD", PlayerRole.LeftDefender);
+        var rescuer = Named(game, "SIM RED", PlayerRole.LeftForward);
+
+        blocker.Position = carrier.Position;
+        rescuer.Position = blocker.Position;
+
+        parser.ProcessMessage(blocker.Name, $"|| {blocker.Name} gets in the way. [BLOCK -> {carrier.Name}]", now);
+        Assert.True(carrier.IsBlocked);
+        Assert.Contains(blocker.Name, game.BlockersOf(carrier.Name));
+
+        parser.ProcessMessage(rescuer.Name, $"|| {rescuer.Name} shoulders in. [BLOCK -> {blocker.Name}]", now);
+
+        Assert.DoesNotContain(blocker.Name, game.BlockersOf(carrier.Name));
+        Assert.False(carrier.IsBlocked, "Nobody is holding them any more.");
+        Assert.True(blocker.IsBlocked, "The blocker is now the one being held.");
+        Assert.Contains(game.PlayByPlay, l => l.Contains("blocks the blocker"));
+    }
+
+    /// <summary>Getting in somebody's way costs you your own freedom too (slide 44).</summary>
+    [Fact]
+    public void BlockingLeavesBothPlayersBlocked()
+    {
+        var (game, parser) = NewGame();
+        var now = DateTime.Now;
+
+        var target = Named(game, "SIM RED", PlayerRole.Midfield);
+        var blocker = Named(game, "SIM GOLD", PlayerRole.LeftDefender);
+
+        blocker.Position = target.Position;
+
+        parser.ProcessMessage(blocker.Name, $"|| {blocker.Name} gets in the way. [BLOCK -> {target.Name}]", now);
+
+        Assert.True(target.IsBlocked);
+        Assert.True(blocker.IsBlocked);
+    }
+
     /// <summary>Every outfield role can block; only goalkeepers have no BLOCK action.</summary>
     [Fact]
     public void EveryOutfieldRoleMayBlock()

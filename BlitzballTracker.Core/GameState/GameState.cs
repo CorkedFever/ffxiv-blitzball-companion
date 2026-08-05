@@ -159,6 +159,12 @@ public class PlayerState
     public int? PhaseRoll { get; set; }
 
     /// <summary>
+    /// A midfielder's roll lent to this player by a successful RALLY, used in place of
+    /// their own for the rest of the phase (slide 56).
+    /// </summary>
+    public int? RalliedRoll { get; set; }
+
+    /// <summary>
     /// GK's current goalie bonus modifier (from GUARD action, +10 each).
     /// Clamped 0-50. Reset if DAZED.
     /// </summary>
@@ -484,6 +490,31 @@ public partial class BlitzGame
 
         blockers.Add(blocker);
         return true;
+    }
+
+    /// <summary>
+    /// Take away every block this player was holding on somebody else.
+    ///
+    /// Blocking a blocker negates what they were doing — block battles are how a team
+    /// frees a held ball carrier. Returns who they had been blocking, for the record.
+    /// </summary>
+    public List<string> CancelBlocksBy(string blocker)
+    {
+        var freed = new List<string>();
+
+        foreach (var (blocked, blockers) in Blocks)
+        {
+            if (blockers.RemoveAll(b => b.Equals(blocker, StringComparison.OrdinalIgnoreCase)) == 0)
+                continue;
+
+            freed.Add(blocked);
+
+            // Nobody left holding them means they are not blocked any more.
+            if (blockers.Count == 0 && Players.TryGetValue(blocked, out var released))
+                released.IsBlocked = false;
+        }
+
+        return freed;
     }
 
     /// <summary>
