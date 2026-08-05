@@ -481,9 +481,13 @@ public partial class ChatParser
 
             // Somebody watching this lane gets their roll now, not when they declared
             // it. The move waits on the roll-off rather than landing first.
+            //
+            // Tackles are caught too: a tackle is a movement, and one down a surveyed
+            // lane can be cancelled by the survey at Reposition (slide 59).
             if (_state.SurveyorAgainst(player, origin, destination) is { } guard)
             {
-                OpenSurveyContest(player, guard, origin, destination, timestamp);
+                OpenSurveyContest(player, guard, origin, destination, timestamp,
+                    isTackleMove, isTackleMove ? action : null);
                 continue;
             }
 
@@ -1309,13 +1313,77 @@ public partial class ChatParser
     }
 
     /// <summary>
+    /// The team-mate a rally is lending its roll to, or null if there is nobody.
+    ///
+    /// Rally reaches players in the midfielder's own zone. Zone rather than waymark, so
+    /// a midfielder on 1 can rally a forward on A — the deck's own example.
+    /// </summary>
+    private PlayerState? RallyTargetOf(PlayerState player, ActionEvent evt)
+    {
+        if (evt.TargetName is { } named && _state.Players.TryGetValue(named, out var chosen))
+            return chosen;
+
+        var zone = BlitzGame.ZoneRank(player.Position);
+        if (zone < 0) return null;
+
+        foreach (var mate in _state.Players.Values)
+        {
+            if (ReferenceEquals(mate, player)) continue;
+            if (!mate.Team.Equals(player.Team, StringComparison.OrdinalIgnoreCase)) continue;
+            if (BlitzGame.ZoneRank(mate.Position) != zone) continue;
+
+            return mate;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Turn a declared action into the one the rules fall back to.
+    ///
+    /// Several actions convert rather than being lost when they have no legal target:
+    /// a rally with nobody to lend to becomes a survey, a tackle with nobody in reach
+    /// becomes a move (slides 56, 59). Reported, because the player asked for one thing
+    /// and got another.
+    /// </summary>
+    private void ConvertAction(ActionEvent evt, PlayerState player, ActionType into, string why, DateTime timestamp)
+    {
+        var from = evt.Action;
+        evt.Action = into;
+
+        _state.PlayByPlay.Add(
+            $"[{timestamp:HH:mm:ss}] {player.Name} had {why}, so their " +
+            $"{from.ToString().ToUpperInvariant()} becomes a {into.ToString().ToUpperInvariant()}.");
+
+        switch (into)
+        {
+            case ActionType.Survey:
+                evt.Outcome = ActionOutcome.Success;
+                player.ActionsSucceeded++;
+                player.IsSurveying = true;
+                break;
+
+            case ActionType.Move:
+                // A move with nowhere named is not a move at all; leave it pending
+                // rather than inventing a destination.
+                if (evt.TargetWaymark is { } to && to != Waymark.None)
+                {
+                    evt.Outcome = ActionOutcome.Success;
+                    player.ActionsSucceeded++;
+                }
+                break;
+        }
+    }
+
+    /// <summary>
     /// Hold a movement up while the surveyor watching that lane rolls against it.
     ///
     /// This is the moment a survey is actually worth anything: it was declared a phase
     /// ago and does nothing until somebody tries to come through.
     /// </summary>
     private void OpenSurveyContest(
-        PlayerState mover, PlayerState surveyor, Waymark from, Waymark to, DateTime timestamp)
+        PlayerState mover, PlayerState surveyor, Waymark from, Waymark to, DateTime timestamp,
+        bool isTackle = false, ActionEvent? tackle = null)
     {
         _state.SurveyContests.Add(new SurveyContest
         {
@@ -1324,11 +1392,15 @@ public partial class ChatParser
             From = from,
             To = to,
             OpenedAt = timestamp,
+            IsTackle = isTackle,
+            Tackle = tackle,
         });
+
+        var what = isTackle ? "tackling through" : "coming through";
 
         _state.PlayByPlay.Add(
             $"[{timestamp:HH:mm:ss}] {surveyor.Name} is watching {from}–{to} and catches " +
-            $"{mover.Name} coming through; they roll it off.");
+            $"{mover.Name} {what}; they roll it off.");
     }
 
     /// <summary>
@@ -1369,6 +1441,19 @@ public partial class ChatParser
         // A tie stops the move: the surveyor is the one defending the lane.
         if (contest.MoverWins() is not true)
         {
+            // A survey beaten tackle is cancelled, not merely halted, so whatever it
+            // already did comes off with it — the daze most of all (slide 59).
+            if (contest is { IsTackle: true, Tackle: { } tackle })
+            {
+                UnapplyAction(tackle);
+                tackle.Outcome = ActionOutcome.Fail;
+
+                _state.PlayByPlay.Add(
+                    $"[{timestamp:HH:mm:ss}] {contest.Surveyor} reads the tackle and cancels it — " +
+                    $"{contest.Mover} stays at {contest.From} and nobody is dazed.");
+                return;
+            }
+
             _state.PlayByPlay.Add(
                 $"[{timestamp:HH:mm:ss}] {contest.Surveyor} holds the lane — " +
                 $"{contest.Mover} does not get through to {contest.To}.");
@@ -1579,9 +1664,14 @@ public partial class ChatParser
 
         if (!target.IsGoalkeeper) return;
 
-        // The whole bonus goes, not ten of it: the GUARD is removed outright.
-        applied.TargetGuardBonusRemoved = target.GuardBonus;
-        target.GuardBonus = 0;
+        // Ten, not the lot. Slide 59 is explicit — "their catch bonus is lowered by 10"
+        // — and slide 66's "the GUARD is removed" means the one activation they just
+        // made, each of which is worth ten. A keeper who has guarded twice keeps the
+        // first one.
+        var removed = Math.Min(10, target.GuardBonus);
+
+        applied.TargetGuardBonusRemoved = removed;
+        target.GuardBonus -= removed;
         target.IsGuarding = false;
     }
 
@@ -2418,8 +2508,17 @@ public partial class ChatParser
                 break;
 
             case ActionType.Rally:
-                // Rally is special: not opposed by enemy, but compared to teammate's roll
-                // We'll mark it pending and resolve when rolls come in
+                // Rally lends the midfielder's roll to a team-mate in their own zone.
+                // With nobody to lend it to there is nothing to resolve, and the deck
+                // says the action becomes a SURVEY rather than being lost (slide 56).
+                if (RallyTargetOf(player, evt) is null)
+                {
+                    ConvertAction(evt, player, ActionType.Survey,
+                        "no team-mate in their zone to rally", timestamp);
+                    break;
+                }
+
+                // Otherwise it stays pending until both rolls are in.
                 break;
 
             case ActionType.Pass:
@@ -2445,6 +2544,16 @@ public partial class ChatParser
             return true;
 
         // Teams and roles come from the roster, so there is nothing to infer here.
+
+        // A tackle nobody was named for has nothing to resolve against, and the deck
+        // converts it to a MOVE rather than losing it (slide 59). Only when a waymark
+        // was called too — a tackle with neither a target nor a destination is just an
+        // unparsed post, and inventing a move from it would be worse than leaving it.
+        if (actionType == ActionType.Tackle && evt.TargetName is null
+            && evt.TargetWaymark is { } fallbackTo && fallbackTo != Waymark.None)
+        {
+            ConvertAction(evt, player, ActionType.Move, "nobody in reach to tackle", timestamp);
+        }
 
         // Tackling belongs to forwards, and their reach runs along their row rather
         // than being confined to their own zone.

@@ -370,6 +370,11 @@ move.
 **GUARD is not rolled for either.** Confirmed Aug 2026: it raises the keeper's bonus and
 there is nothing on the other side of it. Handled the same way as MOVE.
 
+**Daze takes ten off a keeper, not the lot.** Slide 59 is explicit — "their catch bonus
+is lowered by 10" — and slide 66's "the GUARD is removed" means the single activation
+they just made, each worth ten. A keeper who guarded twice keeps the first. This was
+briefly implemented as zeroing the whole bonus, which is wrong.
+
 **Nor is a PASS inside its range** (slide 41). Only blockers standing against the passer
 turn one into a contest. This was the cause of a real defect: the generator rolled for a
 keeper's clearing pass, but the keeper had *just* rolled contesting the shot they caught
@@ -399,10 +404,23 @@ per the first version. Worth confirming.
 - **Rush Gates are placed with field marker 3** (slide 65). The plugin already reads
   waymarks from `MarkingController` and deliberately skips slot 6 (marker "3") — it
   could read gate positions straight from the game instead of only from chat.
-- Survey can be **cancelled by a successful Survey**, can stop a **Rush**, and can
-  cancel a **Tackle** moving down the surveyed lane (slides 48, 59).
+- **DONE** — Survey can cancel a **Tackle** coming down the surveyed lane (slide 59).
+  A beaten tackle is cancelled outright rather than merely halted, so `UnapplyAction`
+  takes the daze off with it.
+- **DONE** — a survey **cannot catch somebody leaving the waymark it surveys from**
+  (slide 48). It watches the lane ahead; a player standing alongside the surveyor and
+  setting off elsewhere was never in it.
+- **DONE** — Rally with no legal target becomes a **Survey**, Tackle with no legal
+  target becomes a **Move** (slides 56, 59), via `ChatParser.ConvertAction`. A tackle
+  only converts when a waymark was named too: one with neither target nor destination
+  is an unparsed post, and inventing a move from it would be worse than leaving it.
+  Shove with no legal target is simply lost.
+- Survey can also be **cancelled by a successful Survey**, and **stops a Rush** before
+  it happens (slide 48). Neither is modelled — Rush contests are not either.
 - A successful Block **completely negates** the target's action, which is why a Block
-  can cancel another Block (slide 44).
-- Rally with no legal target becomes a **Survey**; Tackle with no legal target becomes
-  a **Move**; Shove with no legal target is simply lost (slides 56, 59, 63 — the deck
-  says Standby there, see below).
+  can cancel another Block (slide 44). Also unmodelled: a block puts **both** players
+  in the BLOCKED state, and a blocked player receiving the ball forces an opposed roll
+  where the winner catches it whoever it was meant for.
+- **RALLY itself is still not resolved** (slide 56). The midfielder lends their roll to
+  a team-mate in their zone when it beats theirs, and it lasts only that phase. The
+  no-target conversion above is in; the lending is not.

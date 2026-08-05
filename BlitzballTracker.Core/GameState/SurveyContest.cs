@@ -21,6 +21,17 @@ public sealed class SurveyContest
 
     public required DateTime OpenedAt { get; init; }
 
+    /// <summary>
+    /// Whether the movement being caught is a tackle rather than a plain move.
+    ///
+    /// A survey that wins against a tackle cancels the tackle outright, not just the
+    /// travel — so the daze it landed has to come off with it (slide 59).
+    /// </summary>
+    public bool IsTackle { get; init; }
+
+    /// <summary>The tackle this survey would cancel, so its effects can be undone.</summary>
+    public ActionEvent? Tackle { get; init; }
+
     public Dictionary<string, int> Rolls { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool Involves(string name) =>
@@ -60,12 +71,17 @@ public partial class BlitzGame
     ///
     /// A player never surveys their own side's movement — the point of the action is
     /// stopping the other team coming through.
+    ///
+    /// Nor can they catch somebody leaving the waymark they are surveying from
+    /// (slide 48). A survey watches the lane ahead of them; a player already standing
+    /// alongside them and setting off elsewhere was never in it.
     /// </summary>
     public PlayerState? SurveyorAgainst(PlayerState mover, Waymark from, Waymark to)
     {
         var guard = SurveyorOf(from, to);
         if (guard is null) return null;
         if (guard.Team.Equals(mover.Team, StringComparison.OrdinalIgnoreCase)) return null;
+        if (guard.Position == from) return null;
 
         return guard;
     }

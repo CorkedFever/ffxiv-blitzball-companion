@@ -25,7 +25,11 @@ public class SurveyContestTests
         => parser.ProcessMessage(Ref, $"Random! {player} rolls a {value} (out of 100).", DateTime.Now);
 
     /// <summary>
-    /// A Gold defender watching A–C, with a Red player on A declaring a move to C.
+    /// A Gold defender watching A–C from the far end, with a Red player on A declaring
+    /// a move to C.
+    ///
+    /// The surveyor stands at C rather than A on purpose: a survey cannot catch
+    /// somebody leaving the waymark it is surveying from (slide 48).
     /// </summary>
     private static (BlitzGame Game, ChatParser Parser, PlayerState Mover, PlayerState Surveyor) IntoTheLane()
     {
@@ -38,7 +42,7 @@ public class SurveyContestTests
         var surveyor = Player(game, "SIM GOLD", PlayerRole.LeftDefender);
 
         mover.Position = Waymark.A;
-        surveyor.Position = Waymark.A;
+        surveyor.Position = Waymark.C;
 
         parser.ProcessMessage(Ref, "<< OUTER PHASE (A/B/1/2) >> Start!", now);
         parser.ProcessMessage(surveyor.Name,
@@ -159,6 +163,76 @@ public class SurveyContestTests
         Assert.Empty(game.SurveyContests);
         Assert.Equal(Waymark.A, mover.Position);
         Assert.Contains(game.PlayByPlay, l => l.Contains("never rolled off"));
+    }
+
+    /// <summary>
+    /// A survey watches the lane ahead. Somebody already standing alongside the
+    /// surveyor and setting off elsewhere was never in it (slide 48).
+    /// </summary>
+    [Fact]
+    public void ASurveyCannotCatchSomeoneLeavingItsOwnWaymark()
+    {
+        var game = new BlitzGame();
+        game.ApplyRoster(MatchSimulator.StandardRoster());
+        var parser = new ChatParser(game);
+        var now = DateTime.Now;
+
+        var mover = Player(game, "SIM RED", PlayerRole.LeftForward);
+        var surveyor = Player(game, "SIM GOLD", PlayerRole.LeftDefender);
+
+        // The surveyor is standing at the waymark the mover is leaving from.
+        mover.Position = Waymark.A;
+        surveyor.Position = Waymark.A;
+
+        parser.ProcessMessage(Ref, "<< OUTER PHASE (A/B/1/2) >> Start!", now);
+        parser.ProcessMessage(surveyor.Name, $"|| {surveyor.Name} watches. [SURVEY][A <-> C]", now);
+        parser.ProcessMessage(mover.Name, $"|| {mover.Name} swims for position. [MOVE to C]", now);
+        parser.ProcessMessage(Ref, "<< REPOSITION >>", now);
+
+        Assert.Empty(game.SurveyContests);
+        Assert.Equal(Waymark.C, mover.Position);
+    }
+
+    /// <summary>
+    /// A tackle is a movement, so a survey catches one coming down its lane — and
+    /// beating it cancels the tackle outright rather than merely halting the travel,
+    /// so the daze comes off too (slide 59).
+    /// </summary>
+    [Fact]
+    public void ASurveyCanCancelATackleAndItsDaze()
+    {
+        var game = new BlitzGame();
+        game.ApplyRoster(MatchSimulator.StandardRoster());
+        var parser = new ChatParser(game);
+        var now = DateTime.Now;
+
+        var forward = Player(game, "SIM RED", PlayerRole.LeftForward);
+        var victim = Player(game, "SIM GOLD", PlayerRole.Midfield);
+        var surveyor = Player(game, "SIM GOLD", PlayerRole.LeftDefender);
+
+        forward.Position = Waymark.A;
+        victim.Position = Waymark.C;
+        surveyor.Position = Waymark.C;
+
+        parser.ProcessMessage(Ref, "<< OUTER PHASE (A/B/1/2) >> Start!", now);
+        parser.ProcessMessage(surveyor.Name, $"|| {surveyor.Name} watches. [SURVEY][A <-> C]", now);
+        parser.ProcessMessage(forward.Name, $"|| {forward.Name} crashes in. [TACKLE -> {victim.Name}]", now);
+
+        parser.ProcessMessage(Ref, $"Random! {forward.Name} rolls a 90 (out of 100).", now);
+        parser.ProcessMessage(Ref, $"Random! {victim.Name} rolls a 10 (out of 100).", now);
+
+        Assert.True(victim.IsDazed, "The tackle landed before Reposition.");
+
+        parser.ProcessMessage(Ref, "<< REPOSITION >>", now);
+        Assert.Single(game.SurveyContests);
+
+        // The surveyor wins the roll-off, so the tackle never happened.
+        Roll(parser, forward.Name, 20);
+        Roll(parser, surveyor.Name, 80);
+
+        Assert.Equal(Waymark.A, forward.Position);
+        Assert.False(victim.IsDazed, "A cancelled tackle takes its daze with it.");
+        Assert.Contains(game.PlayByPlay, l => l.Contains("reads the tackle and cancels it"));
     }
 
     [Theory]
