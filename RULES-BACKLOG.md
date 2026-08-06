@@ -390,14 +390,20 @@ rather than landing, both players roll, and the mover only goes through if they 
 a tie holds the lane, since the surveyor is the one defending it. Contests left unrolled
 at a phase boundary close the same way, with the mover staying put.
 
-## Open conflict: Rush Gate duration
+## Settled: a Rush Gate lasts until its placer's next turn
 
-- **Told to us:** a gate lasts until the **end of the round**.
-- **Slide 65:** *"It lasts until the start of your next turn."*
+Resolved Aug 2026 — **slide 65 is the rule**: *"It lasts until the start of your next
+turn."* An earlier note here recorded end-of-round instead, and the code cleared gates
+when a new round began.
 
-Since the goalkeeper acts once per round these nearly coincide, but they differ when a
-goal resets play mid-round. The code currently clears gates when a new round begins,
-per the first version. Worth confirming.
+The two nearly coincide, because a goalkeeper acts once a round. They part company when
+a goal resets play mid-round.
+
+A gate belongs to a goalkeeper, and a keeper's turn comes round in the **inner phase** —
+so that is the clock it runs on. `BlitzGame.InnerPhaseCount` is the counter,
+`RushGate.PlacedOnTurn` stamps it, and `ExpireRushGates` sweeps at each inner phase.
+A gate now survives a reposition, a carrier turn, a round boundary and an outer phase,
+and is spent the moment its keeper acts again.
 
 ## Also noted
 

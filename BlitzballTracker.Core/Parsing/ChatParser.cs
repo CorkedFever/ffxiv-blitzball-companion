@@ -172,9 +172,9 @@ public partial class ChatParser
         {
             _state.Round = int.Parse(roundMatch.Groups[1].Value);
 
-            // A Rush Gate lasts the round it was placed in, so a new round sweeps
-            // the field. Without this a gate stood for the rest of the match.
-            _state.ClearRushGates();
+            // Rush Gates are not swept here. They last until the start of their
+            // placer's next turn (slide 65), which is the next inner phase — close to
+            // a round, but not the same when a goal resets play mid-round.
 
             _state.PlayByPlay.Add($"[{timestamp:HH:mm:ss}] Set {_state.Set}, Round {_state.Round}");
             return true;
@@ -225,6 +225,12 @@ public partial class ChatParser
             ReportUnclearedKeeper(timestamp);
 
             _state.Phase = GamePhase.InnerPhase;
+
+            // The keeper's turn comes round here, so any gate they laid on the last one
+            // has run out (slide 65).
+            _state.InnerPhaseCount++;
+            _state.ExpireRushGates();
+
             ClearPhaseState(timestamp);
             _state.ClearBlocks();
             _state.ClearDives();

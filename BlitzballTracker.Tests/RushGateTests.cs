@@ -80,20 +80,35 @@ public class RushGateTests
     }
 
     /// <summary>
+    /// A gate lasts until the start of its placer's next turn (slide 65). That is the
+    /// next inner phase, because a gate belongs to a goalkeeper and a keeper's turn
+    /// comes round there.
+    ///
     /// The bug this guards against: gates were only ever cleared by a full reset, so
     /// one placed in an early round was still standing at the end of the match.
     /// </summary>
     [Fact]
-    public void GatesAreSweptWhenANewRoundBegins()
+    public void AGateLastsUntilThePlacersNextTurn()
     {
         var (game, parser) = NewGame();
         var now = DateTime.Now;
 
         var keeper = Keeper(game, "SIM RED");
+
+        parser.ProcessMessage("Referee", "<< INNER PHASE (4/C/D) >> Start!", now);
         parser.ProcessMessage(keeper.Name, $"|| {keeper.Name} opens the way. [RUSH to C]", now);
         Assert.Single(game.RushGates);
 
+        // It survives everything up to their next turn, including a new round.
+        parser.ProcessMessage("Referee", "<< REPOSITION >>", now);
+        parser.ProcessMessage("Referee", "<< BALL CARRIER TURN >>", now);
         parser.ProcessMessage("Referee", "<< ROUND 4 >>", now);
+        parser.ProcessMessage("Referee", "<< OUTER PHASE (A/B/1/2) >> Start!", now);
+
+        Assert.Single(game.RushGates);
+
+        // Their turn comes round again, and it is spent.
+        parser.ProcessMessage("Referee", "<< INNER PHASE (4/C/D) >> Start!", now);
 
         Assert.Empty(game.RushGates);
         Assert.Null(game.RushGateAt(Waymark.C));

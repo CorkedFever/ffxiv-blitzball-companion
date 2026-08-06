@@ -109,7 +109,17 @@ public sealed record RushGate(
     Waymark Position,
     int Set,
     int Round,
-    DateTime PlacedAt);
+    DateTime PlacedAt)
+{
+    /// <summary>
+    /// Which of the keeper's turns this was placed on.
+    ///
+    /// A gate lasts until the start of its placer's next turn (slide 65), and a
+    /// goalkeeper's turn comes round in the inner phase — so that, not the round, is
+    /// the clock it runs on.
+    /// </summary>
+    public int PlacedOnTurn { get; init; }
+}
 
 public class PlayerState
 {
@@ -557,9 +567,42 @@ public partial class BlitzGame
         return null;
     }
 
-    public void PlaceRushGate(RushGate gate) => RushGates[gate.Team] = gate;
+    public void PlaceRushGate(RushGate gate) =>
+        RushGates[gate.Team] = gate with { PlacedOnTurn = InnerPhaseCount };
 
-    /// <summary>Gates last a round, so this runs whenever a new one starts.</summary>
+    /// <summary>
+    /// How many inner phases have opened.
+    ///
+    /// The clock a Rush Gate runs on. A gate belongs to a goalkeeper and a keeper's
+    /// turn comes round in the inner phase, so "the start of your next turn" is the
+    /// next inner phase — not the next round.
+    /// </summary>
+    public int InnerPhaseCount { get; set; }
+
+    /// <summary>
+    /// Sweep gates whose placer has come round to their next turn (slide 65).
+    ///
+    /// Previously cleared at the start of each round instead. The two nearly coincide,
+    /// because a keeper acts once a round — but they part company when a goal resets
+    /// play mid-round, and slide 65 is the authority.
+    /// </summary>
+    public void ExpireRushGates()
+    {
+        List<string>? spent = null;
+
+        foreach (var (team, gate) in RushGates)
+        {
+            if (gate.PlacedOnTurn >= InnerPhaseCount) continue;
+            (spent ??= []).Add(team);
+        }
+
+        if (spent is null) return;
+
+        foreach (var team in spent)
+            RushGates.Remove(team);
+    }
+
+    /// <summary>Sweep every gate, whatever its age. For a reset, not for play.</summary>
     public void ClearRushGates() => RushGates.Clear();
 
     public Dictionary<string, PlayerState> Players { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -638,6 +681,7 @@ public partial class BlitzGame
         // These three were previously left dirty across a reset, so a stale Rush Gate
         // or an unexpired daze could leak into the next game.
         BallCarrierTurnCount = 0;
+        InnerPhaseCount = 0;
         RushGates.Clear();
         DazeTracker.Clear();
         LastBackPassRound.Clear();
