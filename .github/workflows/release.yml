@@ -56,6 +56,23 @@ jobs:
 
           Write-Host "Releasing $version (assembly $assembly)"
 
+      # Dalamud.NET.Sdk compiles against the Dalamud assemblies and does not fetch them
+      # itself: it looks for an installed Dalamud, which on a developer's machine
+      # XIVLauncher has already put in place. A runner has no XIVLauncher, so without
+      # this the plugin has nothing to build against.
+      - name: Fetch Dalamud
+        shell: pwsh
+        run: |
+          $hooks = Join-Path $env:APPDATA 'XIVLauncher\addon\Hooks\dev'
+          New-Item -ItemType Directory -Force -Path $hooks | Out-Null
+
+          # The stable branch, to match what players are actually running.
+          Invoke-WebRequest -Uri 'https://goatcorp.github.io/dalamud-distrib/latest.zip' `
+                            -OutFile "$env:RUNNER_TEMP\dalamud.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\dalamud.zip" -DestinationPath $hooks -Force
+
+          Write-Host "Dalamud in place at $hooks"
+
       # A release that fails its own test suite is not a release.
       - name: Test
         run: dotnet test BlitzballTracker.sln -c Release --nologo
@@ -65,6 +82,17 @@ jobs:
           dotnet build BlitzballTracker/BlitzballTracker.csproj
           -c Release --nologo
           -p:Version=${{ steps.version.outputs.assembly }}
+          -bl:${{ runner.temp }}/build.binlog
+
+      # Workflow logs need a sign-in to read, and the failure annotation says only
+      # "exit code 1". A binlog is readable by anyone with the file.
+      - name: Keep the build log when it goes wrong
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-binlog
+          path: ${{ runner.temp }}/build.binlog
+          if-no-files-found: warn
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
