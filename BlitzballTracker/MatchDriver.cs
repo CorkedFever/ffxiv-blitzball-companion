@@ -104,7 +104,16 @@ public sealed class MatchDriver(
         }
     }
 
-    public void ReplayFile(string path, double linesPerSecond)
+    /// <summary>
+    /// Play a recorded log back through the parser.
+    ///
+    /// <paramref name="useEmbeddedRoster"/> exists because a header can be wrong. The
+    /// roster is written when recording starts, so a match that began before the lineup
+    /// was updated carries the previous game's — and a stale sheet is worse than none,
+    /// since the parser only recognises names on it and will therefore recognise nobody.
+    /// Turning this off keeps whatever roster is already loaded.
+    /// </summary>
+    public void ReplayFile(string path, double linesPerSecond, bool useEmbeddedRoster = true)
     {
         if (!File.Exists(path))
         {
@@ -114,7 +123,7 @@ public sealed class MatchDriver(
 
         // A recording made by this plugin carries its own roster, so it can be
         // replayed years later without anyone remembering the lineup.
-        var embedded = RosterHeader.ReadFile(path);
+        var embedded = useEmbeddedRoster ? RosterHeader.ReadFile(path) : null;
         if (embedded is not null)
         {
             _state.ApplyRoster(embedded);

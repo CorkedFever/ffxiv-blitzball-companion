@@ -33,6 +33,13 @@ public sealed class LabView(
     private float _speed = 12f;
     private string _logPath = string.Empty;
 
+    /// <summary>
+    /// Whether to trust the lineup stored in the recording. Usually right; wrong when
+    /// the match started before the roster was updated, which leaves the previous
+    /// game's names in the header.
+    /// </summary>
+    private bool _useEmbeddedRoster = true;
+
     public void Draw()
     {
         BlitzSkin.SectionHeading("Simulated match");
@@ -311,8 +318,16 @@ public sealed class LabView(
 
         ImGui.BeginDisabled(!canPlay);
         if (ImGui.Button("Play recording", new Vector2(150, 0)))
-            _driver.ReplayFile(_logPath.Trim().Trim('"'), _speed);
+            _driver.ReplayFile(_logPath.Trim().Trim('"'), _speed, _useEmbeddedRoster);
         ImGui.EndDisabled();
+
+        // The header is written when recording starts, so a match that began before the
+        // lineup was updated carries the previous game's roster. That is worse than
+        // having none: the parser only recognises names on the sheet, so a stale one
+        // means it recognises nobody and the playback looks empty rather than wrong.
+        ImGui.Checkbox("Use the roster stored in the file", ref _useEmbeddedRoster);
+        if (!_useEmbeddedRoster)
+            BlitzSkin.MutedWrapped("Playing with the roster currently loaded instead.");
 
         if (_driver.LastMessage.Length > 0)
         {
