@@ -49,6 +49,15 @@ public class Configuration : IPluginConfiguration
     public float PlayerTagHeight { get; set; } = 2.2f;
 
     /// <summary>
+    /// How close a character has to be to count as standing on a waymark.
+    ///
+    /// Tight on purpose: a venue is ringed with spectators, and a generous radius
+    /// reads the audience rather than the field. Adjustable because how far players
+    /// float from a marker varies with the venue and how tidily people line up.
+    /// </summary>
+    public float MarkerRadius { get; set; } = FieldGeometry.OnMarkerRadius;
+
+    /// <summary>
     /// The local player's character name (used to resolve "You roll a..." messages).
     /// If empty, auto-detected from Dalamud.
     /// </summary>

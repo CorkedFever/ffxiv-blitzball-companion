@@ -70,7 +70,7 @@ public sealed class Plugin : IDalamudPlugin
         _recorder = new GameRecorder();
         _liveFeed = new LiveFeedClient(log);
 
-        _waymarks = new WaymarkReader(_objectTable, _log);
+        _waymarks = new WaymarkReader(_objectTable, _log, _config);
         _demo = new DemoDirector(_objectTable, _gameState);
         _waymarks.Demo = _demo;
 

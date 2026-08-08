@@ -161,6 +161,22 @@ public sealed class SettingsView(
 
         ImGui.EndDisabled();
 
+        var radius = _config.MarkerRadius;
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.SliderFloat("Marker radius", ref radius, 1f, 10f, "%.1f"))
+        {
+            _config.MarkerRadius = radius;
+            dirty = true;
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "How close counts as standing on a waymark, rather than near it.\n" +
+                "Keep it tight: a venue is ringed with spectators, and a wide radius\n" +
+                "reads the audience instead of the field.");
+        }
+
         if (dirty)
             _pluginInterface.SavePluginConfig(_config);
     }

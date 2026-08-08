@@ -23,11 +23,21 @@ public sealed class WaymarkReader
     private readonly Dictionary<Waymark, Vector3> _markers = new();
     private readonly List<PlayerPosition> _players = [];
 
-    public WaymarkReader(IObjectTable objectTable, IPluginLog log)
+    private readonly Configuration _config;
+
+    public WaymarkReader(IObjectTable objectTable, IPluginLog log, Configuration config)
     {
         _objectTable = objectTable;
         _log = log;
+        _config = config;
     }
+
+    /// <summary>
+    /// How close counts as standing on a waymark. Tunable at the venue, because how
+    /// far players float from a marker varies with the pool and with how tidily people
+    /// line up.
+    /// </summary>
+    private float MarkerRadius => Math.Max(0.5f, _config.MarkerRadius);
 
     /// <summary>True when enough of the Blitzsphere is placed to work with.</summary>
     public bool ArenaReady { get; private set; }
@@ -153,7 +163,7 @@ public sealed class WaymarkReader
                 ? FieldGeometry.NearestLane(seen.Position, markers)
                 : null;
 
-            var actual = FieldGeometry.NearestWaymark(seen.Position, markers);
+            var actual = FieldGeometry.NearestWaymark(seen.Position, markers, MarkerRadius);
             if (actual == Waymark.None) continue;
 
             if (player.Position != actual)
@@ -183,7 +193,7 @@ public sealed class WaymarkReader
             return null;
         }
 
-        var readings = FieldGeometry.ReadFormation(ReadNearbyPlayers(), markers);
+        var readings = FieldGeometry.ReadFormation(ReadNearbyPlayers(), markers, MarkerRadius);
         if (readings.Count == 0) return null;
 
         return FieldGeometry.ToRoster(readings, homeTeam, awayTeam);

@@ -23,11 +23,16 @@ public class FieldGeometryTests
         [Waymark.Four] = new Vector3(540, 0, 170),
     };
 
-    /// <summary>Standing on the D side of a marker: the side the D-defenders take.</summary>
-    private static Vector3 TowardD(Vector3 marker) => marker with { X = marker.X - 3f };
+    /// <summary>
+    /// Standing on the D side of a marker: the side the D-defenders take.
+    ///
+    /// Well inside <see cref="FieldGeometry.OnMarkerRadius"/>, because being on a
+    /// waymark now means being on it rather than somewhere near it.
+    /// </summary>
+    private static Vector3 TowardD(Vector3 marker) => marker with { X = marker.X - 1f };
 
     /// <summary>Standing on the Four side of a marker.</summary>
-    private static Vector3 TowardFour(Vector3 marker) => marker with { X = marker.X + 3f };
+    private static Vector3 TowardFour(Vector3 marker) => marker with { X = marker.X + 1f };
 
     /// <summary>
     /// A match venue is ringed with spectators, and plenty of them stand within a few
@@ -49,10 +54,11 @@ public class FieldGeometryTests
             new PlayerPosition("Home Winger", TowardD(markerTwo), 0f),
             new PlayerPosition("Away Fullback", TowardFour(markerTwo), 0f),
 
-            // Onlookers, further out but still well inside the search radius.
-            new PlayerPosition("Bystander", markerTwo with { X = markerTwo.X - 9f }, 0f),
-            new PlayerPosition("Someone Watching", markerTwo with { X = markerTwo.X + 9f }, 0f),
-            new PlayerPosition("Also Loitering", markerTwo with { Z = markerTwo.Z + 8f }, 0f),
+            // Onlookers, further out but still inside the radius — so it is the
+            // per-marker cap keeping them out, not the distance check.
+            new PlayerPosition("Bystander", markerTwo with { X = markerTwo.X - 2.5f }, 0f),
+            new PlayerPosition("Someone Watching", markerTwo with { X = markerTwo.X + 2.5f }, 0f),
+            new PlayerPosition("Also Loitering", markerTwo with { Z = markerTwo.Z + 2.5f }, 0f),
         ], arena);
 
         Assert.Equal(2, readings.Count);
@@ -72,9 +78,9 @@ public class FieldGeometryTests
 
         var readings = FieldGeometry.ReadFormation(
         [
-            new PlayerPosition("Keeper", goal with { X = goal.X + 1f }, 0f),
-            new PlayerPosition("Hanger On", goal with { X = goal.X + 6f }, 0f),
-            new PlayerPosition("Another", goal with { Z = goal.Z + 7f }, 0f),
+            new PlayerPosition("Keeper", goal with { X = goal.X + 0.5f }, 0f),
+            new PlayerPosition("Hanger On", goal with { X = goal.X + 2f }, 0f),
+            new PlayerPosition("Another", goal with { Z = goal.Z + 2.5f }, 0f),
         ], arena);
 
         var atGoal = readings.Where(r => r.Waymark == Waymark.D).ToList();
@@ -96,8 +102,8 @@ public class FieldGeometryTests
 
         var readings = FieldGeometry.ReadFormation(
         [
-            new PlayerPosition("Nearer", markerA with { X = markerA.X - 2f }, 0f),
-            new PlayerPosition("Further", markerA with { X = markerA.X - 8f }, 0f),
+            new PlayerPosition("Nearer", markerA with { X = markerA.X - 1f }, 0f),
+            new PlayerPosition("Further", markerA with { X = markerA.X - 2.5f }, 0f),
         ], arena);
 
         Assert.Single(readings);
@@ -108,7 +114,7 @@ public class FieldGeometryTests
     public void NearestWaymark_PicksClosestMarker()
     {
         var arena = Arena();
-        var nearC = new Vector3(304, 0, 172);
+        var nearC = new Vector3(302, 0, 171);
 
         Assert.Equal(Waymark.C, FieldGeometry.NearestWaymark(nearC, arena));
     }

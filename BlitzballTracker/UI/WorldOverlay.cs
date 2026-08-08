@@ -52,7 +52,7 @@ public sealed class WorldOverlay(
             DrawZones(draw, markers);
 
         if (_config.ShowPlayerTags)
-            DrawPlayers(draw);
+            DrawPlayers(draw, markers);
     }
 
     /// <summary>How far above the markers the lane lines float, in game units.</summary>
@@ -233,12 +233,20 @@ public sealed class WorldOverlay(
         }
     }
 
-    private void DrawPlayers(ImDrawListPtr draw)
+    private void DrawPlayers(ImDrawListPtr draw, IReadOnlyDictionary<Waymark, Vector3> markers)
     {
+        var radius = Math.Max(0.5f, _config.MarkerRadius);
+
         foreach (var seen in _waymarks.ReadNearbyPlayers())
         {
             // Only people on the team sheet: a venue is full of spectators.
             if (!_state.Players.TryGetValue(PlayerNames.StripWorld(seen.Name), out var player))
+                continue;
+
+            // ...and only while they are actually on the field. Somebody on the sheet
+            // who has wandered off to the bank is not in the match, and labelling them
+            // out there is how a bad roster entry announces itself forever.
+            if (FieldGeometry.NearestWaymark(seen.Position, markers, radius) == Waymark.None)
                 continue;
 
             var head = seen.Position with { Y = seen.Position.Y + _config.PlayerTagHeight };

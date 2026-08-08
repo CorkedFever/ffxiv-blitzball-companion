@@ -62,6 +62,18 @@ public static class FieldGeometry
     public static bool IsAdjacentToD(Waymark w) => w is Waymark.A or Waymark.One;
 
     /// <summary>
+    /// How close counts as standing <em>on</em> a waymark rather than near it.
+    ///
+    /// Deliberately tight — roughly the marker's own ring. A venue is ringed with
+    /// spectators and the sidelines can be a few yalms from a marker, so a generous
+    /// radius does not read the field, it reads the audience.
+    ///
+    /// Two players share a marker at kickoff by standing on opposite sides of it, so
+    /// this has to be wide enough to hold both, and no wider.
+    /// </summary>
+    public const float OnMarkerRadius = 3f;
+
+    /// <summary>
     /// Horizontal (XZ) distance. Blitzball is played underwater, so two players can
     /// share a waymark at very different depths; including Y would mis-assign them.
     /// </summary>
@@ -79,7 +91,7 @@ public static class FieldGeometry
     public static Waymark NearestWaymark(
         Vector3 position,
         IReadOnlyDictionary<Waymark, Vector3> markers,
-        float maxDistance = 15f)
+        float maxDistance = OnMarkerRadius)
     {
         var best = Waymark.None;
         var bestDistance = float.MaxValue;
@@ -187,7 +199,7 @@ public static class FieldGeometry
     public static List<FormationReading> ReadFormation(
         IReadOnlyList<PlayerPosition> players,
         IReadOnlyDictionary<Waymark, Vector3> markers,
-        float maxDistance = 15f)
+        float maxDistance = OnMarkerRadius)
     {
         var readings = new List<FormationReading>();
 
