@@ -324,7 +324,8 @@ public sealed class RosterView : IShellView
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(
-                "Read team and role from where everyone is standing right now.\n" +
+                "Read team and role from where everyone is standing right now,\n" +
+                "and start tracking them immediately.\n" +
                 "Only meaningful at kickoff, before anyone has moved.");
         }
 
@@ -623,6 +624,19 @@ public sealed class RosterView : IShellView
         EnsureSlots();
         ClaimDraft();
 
-        _status = $"Read {detected.Entries.Count} players from the field. Check names and roles, then apply.";
+        // Applied outright rather than left sitting in the draft. This is pressed in the
+        // minute before kickoff with everyone already standing in formation, and a read
+        // that needs a second click to take effect is a read that gets forgotten — which
+        // costs the whole match, because an unapplied roster means nobody is recognised.
+        // The draft stays editable, so a correction is still a change away.
+        Apply();
+
+        // Apply reports its own failures, and those are the more useful message.
+        if (_state.HasRoster)
+        {
+            _status =
+                $"Read {detected.Entries.Count} players off the field and applied them. " +
+                "Check the roles below if anyone was standing oddly.";
+        }
     }
 }
