@@ -73,23 +73,53 @@ public sealed class RosterView : IShellView
         EnsureSlots();
     }
 
-    /// <summary>Pad both squads to six rows so the grid is stable while editing.</summary>
+    /// <summary>
+    /// Normalise the draft to exactly twelve rows, six a side, home first.
+    ///
+    /// Which side a row belongs to is its <em>position in the list</em>, never its team
+    /// name. Keying on the name meant that with both teams unnamed — which is how the
+    /// screen starts — every row matched both columns, so the two squads rendered the
+    /// same six objects and a name typed into one appeared in the other. Two teams
+    /// given the same name broke it the same way.
+    ///
+    /// Blitzball is six a side, so anything past twelve is a paste gone wrong and is
+    /// dropped. Better to lose a row visibly than to apply a player no column shows.
+    /// </summary>
     private void EnsureSlots()
     {
-        foreach (var isHome in new[] { true, false })
-        {
-            var teamName = isHome ? _draft.HomeTeam : _draft.AwayTeam;
-            var count = _draft.Entries.Count(e => IsOn(e, teamName));
+        var home = new List<RosterEntry>(SquadSize);
+        var away = new List<RosterEntry>(SquadSize);
 
-            for (var i = count; i < SquadSize; i++)
-            {
-                _draft.Entries.Add(new RosterEntry
-                {
-                    Team = teamName,
-                    Role = RoleOrder[Math.Min(i, RoleOrder.Length - 1)],
-                });
-            }
+        foreach (var entry in _draft.Entries)
+        {
+            // A row already tagged with a side goes to it; anything untagged fills in
+            // order, which is what a blank draft and a pasted sheet both need.
+            if (_draft.HomeTeam.Length > 0 && IsOn(entry, _draft.HomeTeam) && home.Count < SquadSize)
+                home.Add(entry);
+            else if (_draft.AwayTeam.Length > 0 && IsOn(entry, _draft.AwayTeam) && away.Count < SquadSize)
+                away.Add(entry);
+            else if (home.Count < SquadSize)
+                home.Add(entry);
+            else if (away.Count < SquadSize)
+                away.Add(entry);
         }
+
+        PadSquad(home, _draft.HomeTeam);
+        PadSquad(away, _draft.AwayTeam);
+
+        _draft.Entries.Clear();
+        _draft.Entries.AddRange(home);
+        _draft.Entries.AddRange(away);
+    }
+
+    private static void PadSquad(List<RosterEntry> squad, string team)
+    {
+        for (var i = squad.Count; i < SquadSize; i++)
+            squad.Add(new RosterEntry { Team = team, Role = RoleOrder[i] });
+
+        // The tag follows the column, so renaming a team moves nobody between sides.
+        foreach (var entry in squad)
+            entry.Team = team;
     }
 
     private static bool IsOn(RosterEntry entry, string team) =>
@@ -135,26 +165,32 @@ public sealed class RosterView : IShellView
         ImGui.SetNextItemWidth(220);
         if (ImGui.InputTextWithHint("##home", "Home team (defends D)", ref home, 64))
         {
-            RenameTeam(_draft.HomeTeam, home);
             _draft.HomeTeam = home;
+            RetagSquad(isHome: true);
         }
 
         ImGui.SameLine();
         ImGui.SetNextItemWidth(220);
         if (ImGui.InputTextWithHint("##away", "Away team (defends 4)", ref away, 64))
         {
-            RenameTeam(_draft.AwayTeam, away);
             _draft.AwayTeam = away;
+            RetagSquad(isHome: false);
         }
     }
 
-    private void RenameTeam(string oldName, string newName)
+    /// <summary>
+    /// Point a column's rows at their team name.
+    ///
+    /// By position, so renaming a side never moves anybody across — which is what
+    /// happened when both sides were unnamed and every row matched every name.
+    /// </summary>
+    private void RetagSquad(bool isHome)
     {
-        foreach (var entry in _draft.Entries)
-        {
-            if (IsOn(entry, oldName))
-                entry.Team = newName;
-        }
+        var team = isHome ? _draft.HomeTeam : _draft.AwayTeam;
+        var start = isHome ? 0 : SquadSize;
+
+        for (var i = start; i < start + SquadSize && i < _draft.Entries.Count; i++)
+            _draft.Entries[i].Team = team;
     }
 
     private void DrawSquads()
@@ -165,26 +201,35 @@ public sealed class RosterView : IShellView
         ImGui.TableNextRow();
 
         ImGui.TableNextColumn();
-        DrawSquad(_draft.HomeTeam, "home");
+        DrawSquad(isHome: true);
 
         ImGui.TableNextColumn();
-        DrawSquad(_draft.AwayTeam, "away");
+        DrawSquad(isHome: false);
 
         ImGui.EndTable();
     }
 
-    private void DrawSquad(string team, string idPrefix)
+    private void DrawSquad(bool isHome)
     {
+        var team = isHome ? _draft.HomeTeam : _draft.AwayTeam;
+        var idPrefix = isHome ? "home" : "away";
+
         ImGui.TextColored(
-            BlitzPalette.ToVector(idPrefix == "home" ? BlitzPalette.TeamHome : BlitzPalette.TeamAway),
+            BlitzPalette.ToVector(isHome ? BlitzPalette.TeamHome : BlitzPalette.TeamAway),
             team.Length > 0 ? team : "(unnamed team)");
 
         ImGui.Spacing();
 
-        var slot = 0;
-        foreach (var entry in _draft.Entries)
+        // By position, not by name: the two columns must never be able to show the
+        // same row.
+        var start = isHome ? 0 : SquadSize;
+
+        for (var slot = 0; slot < SquadSize; slot++)
         {
-            if (!IsOn(entry, team)) continue;
+            var index = start + slot;
+            if (index >= _draft.Entries.Count) break;
+
+            var entry = _draft.Entries[index];
 
             ImGui.PushID($"{idPrefix}-{slot}");
 
@@ -209,7 +254,6 @@ public sealed class RosterView : IShellView
             DrawNearbyPicker(entry);
 
             ImGui.PopID();
-            slot++;
         }
     }
 

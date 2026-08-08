@@ -65,8 +65,10 @@ public sealed class Roster
     {
         var problems = new List<string>();
 
+        // Not cosmetic: a player with no team has no goal to defend, so ResetPositions
+        // cannot place them and they never reach the field at all.
         if (string.IsNullOrWhiteSpace(HomeTeam) || string.IsNullOrWhiteSpace(AwayTeam))
-            problems.Add("Both team names should be set.");
+            problems.Add("Both team names must be set, or players cannot be placed on the field.");
 
         if (!string.IsNullOrWhiteSpace(HomeTeam) &&
             HomeTeam.Equals(AwayTeam, StringComparison.OrdinalIgnoreCase))
