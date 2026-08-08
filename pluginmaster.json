@@ -1,19 +1,22 @@
-[
-  {
-    "Author": "Ktsukino",
-    "Name": "Blitzball Companion",
-    "InternalName": "BlitzballTracker",
-    "AssemblyVersion": "0.2.0.0",
-    "Punchline": "Follows a live game of Blitzball, for players, refs and announcers.",
-    "Description": "Reads a Blitzball match out of Yell chat and follows it against the rules: phases, rounds, score, possession, and where every player is standing. Shows the sphere on a field view and over the arena itself, with each player's declared action and their roll. Flags anything that does not match the rules, and leaves the call to the referees.",
-    "ApplicableVersion": "any",
-    "DalamudApiLevel": 15,
-    "RepoUrl": "https://github.com/CorkedFever/ffxiv-blitzball-companion",
-    "Tags": [ "blitzball", "roleplay", "ebl", "tracker" ],
-    "LastUpdate": 0,
-    "DownloadCount": 0,
-    "DownloadLinkInstall": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip",
-    "DownloadLinkTesting": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip"
-  }
-]
+{
+  "Author": "Ktsukino",
+  "Name": "Blitzball Companion",
+  "InternalName": "BlitzballTracker",
+  "AssemblyVersion": "0.2.0.0",
+  "Punchline": "Follows a live game of Blitzball, for players, refs and announcers.",
+  "Description": "Reads a Blitzball match out of Yell chat and follows it against the rules: phases, rounds, score, possession, and where every player is standing. Shows the sphere on a field view and over the arena itself, with each player's declared action and their roll. Flags anything that does not match the rules, and leaves the call to the referees.",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "RepoUrl": "https://github.com/CorkedFever/ffxiv-blitzball-companion",
+  "Tags": [
+    "blitzball",
+    "roleplay",
+    "ebl",
+    "tracker"
+  ],
+  "LastUpdate": 1786195906,
+  "DownloadCount": 0,
+  "DownloadLinkInstall": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip",
+  "DownloadLinkUpdate": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip",
+  "DownloadLinkTesting": "https://github.com/CorkedFever/ffxiv-blitzball-companion/releases/latest/download/latest.zip"
+}
