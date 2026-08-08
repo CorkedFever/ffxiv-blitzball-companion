@@ -116,7 +116,18 @@ jobs:
             $entry.LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
           }
 
-          $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path -Encoding utf8
+          # -AsArray matters more than it looks. ConvertTo-Json unwraps a single-element
+          # array into a bare object, and Dalamud requires the file to be an array — so
+          # the first release published a manifest no installer could read, while every
+          # check that parsed it as JSON still looked fine.
+          ConvertTo-Json -InputObject @($manifest) -Depth 10 -AsArray |
+            Set-Content -LiteralPath $path -Encoding utf8
+
+          # Verify the shape as text, since parsing it proves nothing about this.
+          $written = Get-Content -LiteralPath $path -Raw
+          if (-not $written.TrimStart().StartsWith('[')) {
+            throw 'pluginmaster.json is not a JSON array; Dalamud would reject it.'
+          }
 
       - name: Commit the manifest
         shell: pwsh
