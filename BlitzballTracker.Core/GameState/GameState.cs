@@ -144,6 +144,15 @@ public class PlayerState
     public bool IsStandby { get; set; }
 
     /// <summary>
+    /// Whether this player has been substituted off.
+    ///
+    /// They stay in the player list so the match keeps their stats — the goals and
+    /// tackles belong to whoever earned them — but they are off the field and do not
+    /// come back on at the next goal.
+    /// </summary>
+    public bool IsSubstituted { get; set; }
+
+    /// <summary>
     /// Granted a follow-up move by reaching their own side's Rush Gate.
     ///
     /// The gate acts as a relay: a teammate who moves onto it may move on again,
@@ -665,6 +674,95 @@ public partial class BlitzGame
     }
 
     /// <summary>
+    /// Swap a player off the field for one coming on. Returns false if the outgoing
+    /// player is not being tracked, or the incoming one already is.
+    ///
+    /// Surgical on purpose. Re-applying a whole roster would clear every player and
+    /// reset positions, which mid-match means losing every stat earned so far and
+    /// teleporting both sides back to their kickoff formation.
+    ///
+    /// The substitute takes over the team, role and place on the field, but not the
+    /// stats: goals and tackles belong to whoever made them. The player coming off is
+    /// kept in the list rather than deleted, for the same reason.
+    /// </summary>
+    public bool Substitute(string outgoingName, string incomingName, string? world = null)
+    {
+        var outgoing = PlayerNames.StripWorld(outgoingName);
+        var incoming = PlayerNames.StripWorld(incomingName);
+
+        if (incoming.Length == 0) return false;
+        if (!Players.TryGetValue(outgoing, out var leaving)) return false;
+        if (Players.ContainsKey(incoming)) return false;
+
+        Players[incoming] = new PlayerState
+        {
+            Name = incoming,
+            World = world,
+            Team = leaving.Team,
+            Role = leaving.Role,
+
+            // They step straight into the place on the field that was being held.
+            Position = leaving.Position,
+        };
+
+        // Possession goes with the shirt. A carrier walking off with the ball would
+        // leave the match with nobody holding it.
+        if (BallCarrier is not null && BallCarrier.Equals(outgoing, StringComparison.OrdinalIgnoreCase))
+        {
+            leaving.HasBall = false;
+            Players[incoming].HasBall = true;
+            BallCarrier = incoming;
+        }
+
+        leaving.IsSubstituted = true;
+        leaving.Position = Waymark.None;
+        leaving.IsDazed = false;
+        leaving.IsBlocked = false;
+        leaving.IsDiving = false;
+        leaving.IsSurveying = false;
+        leaving.IsGuarding = false;
+        leaving.SurveyedLane = null;
+        leaving.GuardBonus = 0;
+        leaving.PhaseRoll = null;
+        leaving.RalliedRoll = null;
+
+        // Blocks the departing player was holding leave with them.
+        CancelBlocksBy(outgoing);
+        Blocks.Remove(outgoing);
+
+        // A fresh roster instance, deliberately: ChatParser rebuilds its name index
+        // only when the roster reference changes, so mutating the old one in place
+        // would leave the substitute unrecognised — every action of theirs discarded.
+        CurrentRoster = BuildRosterFromPlayers();
+
+        return true;
+    }
+
+    /// <summary>
+    /// The current lineup as a roster, so a substitution produces something that can be
+    /// saved, re-sent to the live feed, and written into a recording.
+    /// </summary>
+    private Roster BuildRosterFromPlayers()
+    {
+        var roster = new Roster { HomeTeam = HomeTeam, AwayTeam = AwayTeam };
+
+        foreach (var player in Players.Values)
+        {
+            if (player.IsSubstituted) continue;
+
+            roster.Entries.Add(new RosterEntry
+            {
+                Name = player.Name,
+                World = player.World,
+                Team = player.Team,
+                Role = player.Role,
+            });
+        }
+
+        return roster;
+    }
+
+    /// <summary>
     /// State that cannot be recovered when picking up a match already under way.
     ///
     /// Chat announces what *happens*; it does not restate what is currently true. These
@@ -783,6 +881,14 @@ public partial class BlitzGame
         foreach (var p in Players.Values)
         {
             p.IsDazed = false;
+
+            // Somebody who has been substituted off does not come back on at the next
+            // goal. They are kept in the list for their stats, not for the field.
+            if (p.IsSubstituted)
+            {
+                p.Position = Waymark.None;
+                continue;
+            }
 
             // Never place a player whose role or team is unknown. Without this guard
             // the switch below falls through to its Waymark.C default and silently

@@ -62,6 +62,26 @@ plugin is where the coach already is during a match.
 
 ---
 
+## ~~Open question: mid-match roster changes~~ — HANDLED
+
+Confirmed Aug 2026 that teams do this, commonly after halftime. `BlitzGame.Substitute`
+swaps one player for another without disturbing the match: the substitute takes the
+role and the place on the field, the stats stay with whoever earned them, possession
+goes with the shirt, and blocks the departing player was holding are released.
+
+Re-applying an edited roster is *not* a substitution — `ApplyRoster` clears every player
+and resets positions, so mid-match it would lose every stat and send both sides back to
+their kickoff formation. Hence the separate path, and a separate control on the Roster
+screen.
+
+One trap it exists to avoid: `ChatParser` rebuilds its name index only when the roster
+*reference* changes, so a substitution that mutated the roster in place would leave the
+substitute unrecognised and every action of theirs discarded. `Substitute` builds a
+fresh roster instance for exactly that reason, and there is a test on it.
+
+Explicit `[[SUB: X for Y]]` chat parsing is still not done, and would only be worth it
+if the leagues settle on a consistent format.
+
 ## Open question
 
 Which of the two to build first was left undecided.

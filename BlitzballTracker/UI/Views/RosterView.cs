@@ -115,6 +115,7 @@ public sealed class RosterView : IShellView
         ImGui.Spacing();
 
         DrawActions();
+        DrawSubstitution();
         DrawPasteImport();
         DrawPresets();
         DrawValidation();
@@ -272,6 +273,98 @@ public sealed class RosterView : IShellView
             EnsureSlots();
             _status = "Draft cleared. The active roster is unchanged until you apply.";
         }
+    }
+
+    private int _subOutIndex;
+    private string _subInName = string.Empty;
+
+    /// <summary>
+    /// Swap one player for another without disturbing the match.
+    ///
+    /// Kept apart from the roster editor above on purpose. Applying an edited roster
+    /// rebuilds every player from scratch, which mid-match means losing every stat
+    /// earned so far and sending both sides back to their kickoff formation. A
+    /// substitution has to be surgical, and teams do make them — commonly at halftime.
+    /// </summary>
+    private void DrawSubstitution()
+    {
+        if (!_state.HasRoster || !_state.IsActive) return;
+
+        ImGui.Spacing();
+        BlitzSkin.SectionHeading("Substitution");
+
+        BlitzSkin.MutedWrapped(
+            "Swaps a player mid-match without resetting anything. The substitute takes " +
+            "over the role and the place on the field; the stats stay with whoever earned them.");
+
+        ImGui.Spacing();
+
+        var onField = _state.Players.Values
+            .Where(p => !p.IsSubstituted)
+            .OrderBy(p => p.Team, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (onField.Count == 0) return;
+
+        _subOutIndex = Math.Clamp(_subOutIndex, 0, onField.Count - 1);
+
+        var labels = onField
+            .Select(p => $"{p.Name} ({Roster.RoleAbbreviation(p.Role)}, {p.Team})")
+            .ToArray();
+
+        ImGui.SetNextItemWidth(260);
+        ImGui.Combo("##suboff", ref _subOutIndex, labels, labels.Length);
+
+        ImGui.SameLine();
+        BlitzSkin.Muted("comes off for");
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(180);
+        ImGui.InputTextWithHint("##subon", "name coming on", ref _subInName, 64);
+
+        ImGui.SameLine();
+        if (ImGui.Button("Substitute", new Vector2(110, 0)))
+            ApplySubstitution(onField[_subOutIndex]);
+    }
+
+    private void ApplySubstitution(PlayerState outgoing)
+    {
+        var incoming = _subInName.Trim();
+
+        if (incoming.Length == 0)
+        {
+            _status = "Enter the name of the player coming on.";
+            return;
+        }
+
+        if (!_state.Substitute(outgoing.Name, incoming))
+        {
+            _status = $"Could not substitute: {incoming} may already be on the roster.";
+            return;
+        }
+
+        _parser.ClearUnmatchedNames();
+
+        // The tracked roster is now the authority, so the editor and the saved copy
+        // both follow it rather than drifting from what is actually on the field.
+        if (_state.CurrentRoster is { } updated)
+        {
+            _draft = updated.Clone();
+            EnsureSlots();
+
+            _config.LastRoster = updated;
+            _pluginInterface.SavePluginConfig(_config);
+
+            _liveFeed.SendRoster(updated);
+        }
+
+        _state.PlayByPlay.Add(
+            $"[{DateTime.Now:HH:mm:ss}] Substitution: {incoming} comes on for {outgoing.Name} " +
+            $"at {Roster.RoleAbbreviation(outgoing.Role)}.");
+
+        _status = $"{incoming} on for {outgoing.Name}.";
+        _subInName = string.Empty;
     }
 
     private void DrawPasteImport()
