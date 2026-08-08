@@ -22,6 +22,18 @@ public static class PlayerNames
 
         var s = raw.Trim();
 
+        // A crossworld name arrives as "Name<glyph>World", the glyph being one of the
+        // game's own icons. Those live in the private use area, so cutting at the first
+        // one strips the world without needing to know which icon was used — and there
+        // are several. Left unhandled, the world reads as part of the name.
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] is < '' or > '') continue;
+
+            s = s[..i].TrimEnd();
+            break;
+        }
+
         var bracket = s.LastIndexOf('[');
         if (bracket > 0 && s.EndsWith(']'))
             s = s[..bracket];

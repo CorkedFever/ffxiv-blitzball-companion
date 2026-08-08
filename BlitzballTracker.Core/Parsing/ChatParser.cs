@@ -3026,7 +3026,12 @@ public partial class ChatParser
 
     #region Regex (source-generated)
 
-    [GeneratedRegex(@"<<\s*BLITZOFF\s*>>", RegexOptions.IgnoreCase)]
+    // Both restarts. Referees write "<< BLITZOFF >>"; a Blitzon is called inline and in
+    // passing, "[BLITZON.]", so square brackets and trailing punctuation count too.
+    //
+    // Brackets of some kind are required, and that is the whole point: the crowd shouts
+    // "BLITZOFF!!!" at kickoff, and matching bare text restarts the match on every cheer.
+    [GeneratedRegex(@"<<\s*BLITZ(?:OFF|ON)\s*>>|\[\s*BLITZ(?:OFF|ON)\s*[.!]?\s*\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexBlitzoff();
 
     [GeneratedRegex(@"<<\s*ROUND\s+(\d+)\s*>>", RegexOptions.IgnoreCase)]
@@ -3057,17 +3062,25 @@ public partial class ChatParser
     [GeneratedRegex(@"CAUGHT(?:\s+by\s+([\w\s']+?))?\s*\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexCaught();
 
-    [GeneratedRegex(@"(\w[\w\s']+?)\s+rolls\s+a\s+(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
+    // The game puts a dice glyph between "a" and the number — "rolls a  7" — and it is
+    // a private-use character, not whitespace. Requiring digits straight after "a" meant
+    // no roll in a real match parsed at all, so nothing ever resolved.
+    // The name is captured loosely and normalised afterwards, because a crossworld
+    // roller arrives as "Name<glyph>World" and a character class that stops at the
+    // glyph captures the world instead of the player.
+    [GeneratedRegex(@"(?:Random!\s*)?(.+?)\s+rolls\s+a\s+\D{0,4}?(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexDiceRoll();
 
-    [GeneratedRegex(@"You\s+roll\s+a\s+(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"You\s+roll\s+a\s+\D{0,4}?(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexYouRoll();
 
     [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\s*(?:→|-{1,5}>|>|\bto\b)?\s*([\w\s'+\-]*?)\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexActionDeclaration();
 
     // Secondary pattern: [ACTION] [TargetName] — used by RALLY
-    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]\s*\[?([\w\s']+?)\]?!", RegexOptions.IgnoreCase)]
+    // "[TACKLE] Name!" and "[RALLY] on: Name!" — the second is how rally names its
+    // target in practice, and the colon stopped the capture dead.
+    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]\s*(?:on\s*:?\s*)?\[?([\w\s']+?)\]?!", RegexOptions.IgnoreCase)]
     private static partial Regex RegexActionWithSeparateTarget();
 
     // Tertiary pattern: [ACTION]s to [Target] or [ACTION] to Target.
