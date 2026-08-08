@@ -197,6 +197,11 @@ public static class FieldGeometry
             return readings; // Without both goals there is no axis to measure against.
         }
 
+        // Everyone standing near a marker, with how near and which side of it they are
+        // on. Proximity alone is not enough to call somebody a player: a match venue is
+        // ringed with spectators, and plenty of them are within a few yards of a marker.
+        var candidates = new List<(string Name, Waymark Waymark, float Distance, float Offset)>();
+
         foreach (var player in players)
         {
             var waymark = NearestWaymark(player.Position, markers, maxDistance);
@@ -204,28 +209,58 @@ public static class FieldGeometry
 
             var markerPos = markers[waymark];
 
-            // Goals are unambiguous: whoever stands there keeps it.
+            candidates.Add((
+                player.Name,
+                waymark,
+                HorizontalDistance(player.Position, markerPos),
+                GoalAxisOffset(player.Position, markerPos, goalD, goalFour)));
+        }
+
+        // The kickoff formation is fixed, so each marker holds a known number of
+        // players and no more. Taking only the closest that many is what keeps the
+        // crowd out — a bystander has to be nearer the marker than the player actually
+        // lined up on it to displace them.
+        foreach (var waymark in markers.Keys)
+        {
+            var here = new List<(string Name, Waymark Waymark, float Distance, float Offset)>();
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.Waymark == waymark) here.Add(candidate);
+            }
+
+            if (here.Count == 0) continue;
+
+            here.Sort(static (a, b) => a.Distance.CompareTo(b.Distance));
+
+            // A goal holds its keeper and nobody else.
             if (waymark is Waymark.D or Waymark.Four)
             {
                 readings.Add(new FormationReading(
-                    player.Name, waymark, DefendsD: waymark == Waymark.D, PlayerRole.Goalkeeper));
+                    here[0].Name, waymark, DefendsD: waymark == Waymark.D, PlayerRole.Goalkeeper));
                 continue;
             }
 
-            var offset = GoalAxisOffset(player.Position, markerPos, goalD, goalFour);
-            var defendsD = offset < 0f;
-
-            var role = waymark switch
+            // Every other marker holds exactly two at kickoff, one from each side,
+            // facing each other across it. So take the nearest on each side and stop.
+            foreach (var defendsD in new[] { true, false })
             {
-                // Centre holds one midfielder from each side.
-                Waymark.C => PlayerRole.Midfield,
+                foreach (var candidate in here)
+                {
+                    if (candidate.Offset < 0f != defendsD) continue;
 
-                // A strike zone holds the defender of the adjacent goal and the
-                // forward attacking it. Lane decides Left versus Right.
-                _ => StrikeRole(waymark, defendsD),
-            };
+                    var role = waymark == Waymark.C
+                        // Centre holds one midfielder from each side.
+                        ? PlayerRole.Midfield
 
-            readings.Add(new FormationReading(player.Name, waymark, defendsD, role));
+                        // A strike zone holds the defender of the adjacent goal and the
+                        // forward attacking it. Lane decides Left versus Right.
+                        : StrikeRole(waymark, defendsD);
+
+                    readings.Add(new FormationReading(candidate.Name, waymark, defendsD, role));
+                    break;
+                }
+            }
         }
 
         return readings;

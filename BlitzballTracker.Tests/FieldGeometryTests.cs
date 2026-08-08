@@ -29,6 +29,81 @@ public class FieldGeometryTests
     /// <summary>Standing on the Four side of a marker.</summary>
     private static Vector3 TowardFour(Vector3 marker) => marker with { X = marker.X + 3f };
 
+    /// <summary>
+    /// A match venue is ringed with spectators, and plenty of them stand within a few
+    /// yards of a marker — including whoever is running the tracker.
+    ///
+    /// Proximity alone used to be enough to be called a player, so detection dragged
+    /// the crowd in. The kickoff formation is fixed: each marker holds a known number
+    /// of players, so only the closest that many count.
+    /// </summary>
+    [Fact]
+    public void ReadFormation_IgnoresTheCrowdStandingNearAMarker()
+    {
+        var arena = Arena();
+        var markerTwo = arena[Waymark.Two];
+
+        var readings = FieldGeometry.ReadFormation(
+        [
+            // The two actually lined up, close in and facing each other across it.
+            new PlayerPosition("Home Winger", TowardD(markerTwo), 0f),
+            new PlayerPosition("Away Fullback", TowardFour(markerTwo), 0f),
+
+            // Onlookers, further out but still well inside the search radius.
+            new PlayerPosition("Bystander", markerTwo with { X = markerTwo.X - 9f }, 0f),
+            new PlayerPosition("Someone Watching", markerTwo with { X = markerTwo.X + 9f }, 0f),
+            new PlayerPosition("Also Loitering", markerTwo with { Z = markerTwo.Z + 8f }, 0f),
+        ], arena);
+
+        Assert.Equal(2, readings.Count);
+        Assert.Contains(readings, r => r.Name == "Home Winger");
+        Assert.Contains(readings, r => r.Name == "Away Fullback");
+        Assert.DoesNotContain(readings, r => r.Name == "Bystander");
+        Assert.DoesNotContain(readings, r => r.Name == "Someone Watching");
+        Assert.DoesNotContain(readings, r => r.Name == "Also Loitering");
+    }
+
+    /// <summary>A goal holds its keeper and nobody else, however many are milling about.</summary>
+    [Fact]
+    public void ReadFormation_TakesOneKeeperPerGoal()
+    {
+        var arena = Arena();
+        var goal = arena[Waymark.D];
+
+        var readings = FieldGeometry.ReadFormation(
+        [
+            new PlayerPosition("Keeper", goal with { X = goal.X + 1f }, 0f),
+            new PlayerPosition("Hanger On", goal with { X = goal.X + 6f }, 0f),
+            new PlayerPosition("Another", goal with { Z = goal.Z + 7f }, 0f),
+        ], arena);
+
+        var atGoal = readings.Where(r => r.Waymark == Waymark.D).ToList();
+
+        Assert.Single(atGoal);
+        Assert.Equal("Keeper", atGoal[0].Name);
+        Assert.Equal(PlayerRole.Goalkeeper, atGoal[0].Role);
+    }
+
+    /// <summary>
+    /// Two on the same side of a marker is not a formation — one of them is standing
+    /// about. Only the nearer counts, and the far side stays empty.
+    /// </summary>
+    [Fact]
+    public void ReadFormation_TakesOnlyTheNearestPerSide()
+    {
+        var arena = Arena();
+        var markerA = arena[Waymark.A];
+
+        var readings = FieldGeometry.ReadFormation(
+        [
+            new PlayerPosition("Nearer", markerA with { X = markerA.X - 2f }, 0f),
+            new PlayerPosition("Further", markerA with { X = markerA.X - 8f }, 0f),
+        ], arena);
+
+        Assert.Single(readings);
+        Assert.Equal("Nearer", readings[0].Name);
+    }
+
     [Fact]
     public void NearestWaymark_PicksClosestMarker()
     {
