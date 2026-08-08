@@ -39,6 +39,13 @@ public sealed class RosterView : IShellView
     private readonly ChatParser _parser;
 
     private Roster _draft;
+
+    /// <summary>
+    /// The tracked roster this editor last pulled from, so it pulls again only when
+    /// that is genuinely replaced rather than whenever the draft happens to be empty.
+    /// </summary>
+    private Roster? _syncedFrom;
+
     private string _pasteBuffer = string.Empty;
     private string _presetName = string.Empty;
     private string _status = string.Empty;
@@ -128,10 +135,16 @@ public sealed class RosterView : IShellView
     public void Draw()
     {
         // Show what is actually being tracked. Otherwise a roster applied elsewhere
-        // (a simulated match, a recording that carried its own) leaves this screen
-        // looking blank, as though nothing were loaded at all.
-        if (_draft.NamedCount == 0 && _state.CurrentRoster is { NamedCount: > 0 } live)
+        // (a simulated match, a recording that carried its own, a substitution) leaves
+        // this screen looking blank, as though nothing were loaded at all.
+        //
+        // Keyed on the roster *instance* changing, not on the draft being empty. The
+        // latter meant Clear undid itself: emptying the draft made it empty, which was
+        // the condition to refill it from the live roster on the very next frame.
+        if (!ReferenceEquals(_syncedFrom, _state.CurrentRoster) &&
+            _state.CurrentRoster is { NamedCount: > 0 } live)
         {
+            _syncedFrom = _state.CurrentRoster;
             _draft = live.Clone();
             EnsureSlots();
         }
@@ -177,6 +190,15 @@ public sealed class RosterView : IShellView
             RetagSquad(isHome: false);
         }
     }
+
+    /// <summary>
+    /// Mark the draft as the user's, so the tracked roster is not pulled back over it.
+    ///
+    /// Everything that replaces the draft deliberately — clearing, pasting, loading a
+    /// preset, detecting a formation — says so here. Otherwise a roster arriving from
+    /// elsewhere mid-edit would quietly overwrite the work.
+    /// </summary>
+    private void ClaimDraft() => _syncedFrom = _state.CurrentRoster;
 
     /// <summary>
     /// Point a column's rows at their team name.
@@ -315,6 +337,11 @@ public sealed class RosterView : IShellView
         {
             _draft = new Roster { HomeTeam = _draft.HomeTeam, AwayTeam = _draft.AwayTeam };
             EnsureSlots();
+
+            // Stay cleared. Without this the tracked roster would be pulled straight
+            // back in, because an empty draft used to be the signal to refill it.
+            _syncedFrom = _state.CurrentRoster;
+
             _status = "Draft cleared. The active roster is unchanged until you apply.";
         }
     }
@@ -394,6 +421,7 @@ public sealed class RosterView : IShellView
         // both follow it rather than drifting from what is actually on the field.
         if (_state.CurrentRoster is { } updated)
         {
+            _syncedFrom = updated;
             _draft = updated.Clone();
             EnsureSlots();
 
@@ -432,6 +460,8 @@ public sealed class RosterView : IShellView
 
         _draft = parsed;
         EnsureSlots();
+        ClaimDraft();
+
         _status = $"Imported {parsed.Entries.Count} players. Review, then apply.";
     }
 
@@ -469,6 +499,8 @@ public sealed class RosterView : IShellView
             {
                 _draft = roster.Clone();
                 EnsureSlots();
+                ClaimDraft();
+
                 _presetName = name;
                 _status = $"Loaded preset '{name}'. Review, then apply.";
             }
@@ -557,6 +589,9 @@ public sealed class RosterView : IShellView
         _state.ApplyRoster(applied);
         _parser.ClearUnmatchedNames();
 
+        // What is on screen is what was just applied, so there is nothing to pull back.
+        _syncedFrom = _state.CurrentRoster;
+
         // Keep the broadcast in step. A substitution mid-match is exactly when the
         // overlay would otherwise start dropping a player's actions on the floor.
         _liveFeed.SendRoster(applied);
@@ -586,6 +621,7 @@ public sealed class RosterView : IShellView
         _draft.HomeTeam = home;
         _draft.AwayTeam = away;
         EnsureSlots();
+        ClaimDraft();
 
         _status = $"Read {detected.Entries.Count} players from the field. Check names and roles, then apply.";
     }
