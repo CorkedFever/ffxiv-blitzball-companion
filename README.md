@@ -34,6 +34,12 @@ people actually argue about.
 with what was announced it raises a flag and carries on — it does not try to correct the
 match.
 
+**Joins a match already under way.** Chat announces what happens, never what is
+currently true, so a log can never tell you where anyone is standing halfway through.
+The plugin reads it off the arena instead — everyone is physically on a waymark. Phase,
+round, score and possession arrive with the next referee call; what genuinely cannot be
+recovered starts blank and says so.
+
 **Practises without twelve other people.** A seeded match generator plays complete games
 through the real parser, so the plugin can be developed and demonstrated without an
 event to attend.

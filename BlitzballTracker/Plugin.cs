@@ -34,6 +34,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly MatchDriver _driver;
     private readonly WorldOverlay _worldOverlay;
 
+    /// <summary>Held so the framework tick can pick up a join request from it.</summary>
+    private readonly UI.Views.MatchView _matchView;
+
     private readonly WindowSystem _windowSystem;
     private readonly ShellWindow _shell;
 
@@ -85,9 +88,11 @@ public sealed class Plugin : IDalamudPlugin
             _log.Info($"Restored roster: {saved.HomeTeam} vs {saved.AwayTeam} ({saved.Entries.Count} players).");
         }
 
+        _matchView = new MatchView(_gameState, _recorder, _liveFeed, _driver);
+
         IShellView[] views =
         [
-            new MatchView(_gameState, _recorder, _liveFeed, _driver),
+            _matchView,
             new RosterView(_gameState, _config, _pluginInterface, _waymarks, _parser, _liveFeed),
             new StatsView(_gameState),
             new LabView(_driver, _gameState, _waymarks, _config),
@@ -160,6 +165,12 @@ public sealed class Plugin : IDalamudPlugin
 
         if (!_clientState.IsLoggedIn) return;
 
+        // Picking up a match already under way. Done here rather than in the view
+        // because the arena reader lives out here, and the first sync has to happen
+        // before the ordinary gate below lets anything through.
+        if (_matchView.TakeJoinRequest())
+            JoinMatchInProgress(now);
+
         // "You roll a ..." lines are attributed to whoever is logged in.
         if (string.IsNullOrEmpty(_parser.LocalPlayerName))
             _parser.LocalPlayerName = _objectTable.LocalPlayer?.Name.TextValue;
@@ -185,6 +196,39 @@ public sealed class Plugin : IDalamudPlugin
         {
             _log.Error($"[BlitzTracker] Position sync failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Start following a match that was already in progress.
+    ///
+    /// Chat announces what happens, never what is currently true, so a late joiner can
+    /// recover nothing about the field from it. The arena is the way in: every player is
+    /// physically standing on a waymark, and that can simply be read.
+    /// </summary>
+    private void JoinMatchInProgress(DateTime now)
+    {
+        _gameState.JoinInProgress();
+
+        var placed = 0;
+
+        try
+        {
+            placed = _waymarks.SyncPositions(_gameState);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"[BlitzTracker] Could not read the arena on join: {ex.Message}");
+        }
+
+        _gameState.PlayByPlay.Add(
+            placed > 0
+                ? $"[{now:HH:mm:ss}] Joined in progress — read {placed} player(s) off the arena."
+                : $"[{now:HH:mm:ss}] ⚑ Joined in progress, but no players could be read off the " +
+                  "arena. Check the waymarks are down and the teams are nearby.");
+
+        _gameState.PlayByPlay.Add(
+            $"[{now:HH:mm:ss}] ⚑ Starting blank on: {string.Join(", ", BlitzGame.UnknowableOnJoin)}. " +
+            "Score and phase will correct themselves on the next referee call.");
     }
 
     /// <summary>

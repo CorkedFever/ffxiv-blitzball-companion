@@ -664,6 +664,69 @@ public partial class BlitzGame
         ResetPositions();
     }
 
+    /// <summary>
+    /// State that cannot be recovered when picking up a match already under way.
+    ///
+    /// Chat announces what *happens*; it does not restate what is currently true. These
+    /// are the things a late joiner has no way to reconstruct, so they are dropped
+    /// rather than assumed — and named, because a tracker quietly guessing at them is
+    /// worse than one saying it does not know.
+    /// </summary>
+    public static readonly string[] UnknowableOnJoin =
+    [
+        "who is dazed",
+        "blocks and dives already standing",
+        "goalkeeper guard bonuses",
+        "Rush Gates on the field",
+        "which side has spent their back pass",
+    ];
+
+    /// <summary>
+    /// Pick up a match that is already in progress.
+    ///
+    /// Positions come from the arena rather than from chat — every player is physically
+    /// standing somewhere, and the plugin can read that — so the one thing a log parser
+    /// could never recover is the one thing that comes for free here. Phase, round,
+    /// score and possession all arrive with the next referee call.
+    ///
+    /// What cannot be recovered is cleared outright. Carrying over whatever happened to
+    /// be in memory would be worse than starting from nothing, because it would look
+    /// authoritative.
+    /// </summary>
+    public void JoinInProgress()
+    {
+        IsActive = true;
+        IsFinished = false;
+
+        ClearBlocks();
+        ClearDives();
+        ClearRushGates();
+        ClearFumble();
+        ClearTieBreaks();
+        ClearSurveyContests();
+        ClearBuzzerShot();
+
+        DazeTracker.Clear();
+        LastBackPassRound.Clear();
+
+        foreach (var player in Players.Values)
+        {
+            player.IsDazed = false;
+            player.IsBlocked = false;
+            player.IsDiving = false;
+            player.IsSurveying = false;
+            player.IsGuarding = false;
+            player.IsStandby = false;
+            player.SurveyedLane = null;
+            player.GuardBonus = 0;
+            player.PhaseRoll = null;
+            player.RalliedRoll = null;
+            player.HasGateMove = false;
+        }
+
+        CurrentPhaseActions.Clear();
+    }
+
     public void Reset()
     {
         IsActive = false;

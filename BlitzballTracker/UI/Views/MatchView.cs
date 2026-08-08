@@ -71,6 +71,8 @@ public sealed class MatchView(
                 "Waiting for kickoff",
                 "Tracking begins when << STANDBY FOR BLITZOFF >> appears in Yell chat. " +
                 "To try it now, run a simulated match from the Lab.");
+
+            DrawJoinInProgress();
             return;
         }
 
@@ -86,6 +88,55 @@ public sealed class MatchView(
         ImGui.Spacing();
 
         DrawPlayByPlay();
+    }
+
+    /// <summary>
+    /// Pick up a match that started before the tracker did.
+    ///
+    /// Offered here because this is the screen somebody arriving late is looking at.
+    /// Positions come from the arena rather than from chat, which is the whole reason
+    /// this is possible at all — a log parser could never recover them.
+    /// </summary>
+    private void DrawJoinInProgress()
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        BlitzSkin.SectionHeading("Already under way?");
+
+        BlitzSkin.MutedWrapped(
+            "Reads everyone's position straight off the arena and starts following from " +
+            "here. Phase, round, score and possession arrive with the next referee call.");
+
+        ImGui.Spacing();
+
+        if (!_state.HasRoster)
+        {
+            BlitzSkin.Muted("Load a roster first — positions can only be read for players on it.");
+            return;
+        }
+
+        if (ImGui.Button("Join match in progress", new Vector2(210, 0)))
+            _joinRequested = true;
+
+        ImGui.Spacing();
+
+        BlitzSkin.MutedWrapped(
+            "Cannot be recovered, so it starts blank: " +
+            string.Join(", ", BlitzGame.UnknowableOnJoin) + ".");
+    }
+
+    /// <summary>Set by the button, consumed by the host, which owns the arena reader.</summary>
+    private bool _joinRequested;
+
+    /// <summary>Whether the user asked to join a match in progress since the last check.</summary>
+    public bool TakeJoinRequest()
+    {
+        if (!_joinRequested) return false;
+
+        _joinRequested = false;
+        return true;
     }
 
     private static void DrawEmptyState(string headline, string detail)
