@@ -100,11 +100,16 @@ public class JoinInProgressTests
     }
 
     /// <summary>
-    /// Positions are left alone. The plugin fills them from the arena straight after,
-    /// and wiping them here would throw away the one thing that can be recovered.
+    /// Positions are cleared, not kept.
+    ///
+    /// A match joined in progress has been running for a while, so the kickoff
+    /// formation applied with the roster is simply wrong. Leaving it there is worse
+    /// than admitting ignorance: the arena then contradicts every player at once and
+    /// the log fills with faults that are really the first honest reading. The plugin
+    /// fills them from the arena immediately afterwards.
     /// </summary>
     [Fact]
-    public void JoiningLeavesPositionsForTheArenaToFill()
+    public void JoiningForgetsWhereEveryoneWas()
     {
         var game = new BlitzGame();
         game.ApplyRoster(MatchSimulator.StandardRoster());
@@ -114,7 +119,7 @@ public class JoinInProgressTests
 
         game.JoinInProgress();
 
-        Assert.Equal(Waymark.Two, player.Position);
+        Assert.All(game.Players.Values, p => Assert.Equal(Waymark.None, p.Position));
     }
 
     /// <summary>

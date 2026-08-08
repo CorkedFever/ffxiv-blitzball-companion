@@ -136,7 +136,10 @@ public sealed class WaymarkReader
     ///
     /// The game is authoritative over chat here: a declared [MOVE to X] that does not
     /// match where the player actually went is reported rather than obeyed.
-    /// Returns the number of players whose tracked position changed.
+    ///
+    /// Returns how many rostered players were found standing on a waymark — not how
+    /// many moved. A count of changes reads as zero when everyone is already where they
+    /// should be, which is indistinguishable from reading nothing at all.
     /// </summary>
     public int SyncPositions(BlitzGame game, Action<string, Waymark, Waymark>? onMismatch = null)
     {
@@ -150,7 +153,7 @@ public sealed class WaymarkReader
         if (!ArenaReady) return 0;
 
         var nearby = ReadNearbyPlayers();
-        var changed = 0;
+        var placed = 0;
 
         foreach (var seen in nearby)
         {
@@ -166,15 +169,19 @@ public sealed class WaymarkReader
             var actual = FieldGeometry.NearestWaymark(seen.Position, markers, MarkerRadius);
             if (actual == Waymark.None) continue;
 
-            if (player.Position != actual)
-            {
+            placed++;
+
+            if (player.Position == actual) continue;
+
+            // Nothing to contradict when we had no idea where they were, which is the
+            // state a match joined in progress starts from.
+            if (player.Position != Waymark.None)
                 onMismatch?.Invoke(player.Name, player.Position, actual);
-                player.Position = actual;
-                changed++;
-            }
+
+            player.Position = actual;
         }
 
-        return changed;
+        return placed;
     }
 
     /// <summary>

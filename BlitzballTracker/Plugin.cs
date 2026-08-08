@@ -186,11 +186,7 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             _waymarks.SyncPositions(_gameState, (player, declared, actual) =>
-            {
-                if (declared == Waymark.None) return; // first placement, nothing to contradict
-
-                _gameState.PlayByPlay.Add($"[{now:HH:mm:ss}] ⚑ {player} is at {actual}, not {declared}.");
-            });
+                _gameState.PlayByPlay.Add($"[{now:HH:mm:ss}] ⚑ {player} is at {actual}, not {declared}."));
         }
         catch (Exception ex)
         {

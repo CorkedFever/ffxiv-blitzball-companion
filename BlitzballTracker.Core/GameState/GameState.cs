@@ -820,6 +820,12 @@ public partial class BlitzGame
             player.PhaseRoll = null;
             player.RalliedRoll = null;
             player.HasGateMove = false;
+
+            // Nobody is where the kickoff formation says any more — the match has been
+            // running. Leaving them there is worse than admitting ignorance: the arena
+            // then contradicts all twelve at once, and the log fills with faults that
+            // are really just the first honest reading.
+            player.Position = Waymark.None;
         }
 
         CurrentPhaseActions.Clear();
