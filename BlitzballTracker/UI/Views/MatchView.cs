@@ -198,6 +198,31 @@ public sealed class MatchView(
 
     private void DrawPhaseRow()
     {
+        // Without the league linkshell there are no phase calls, so the phase, round
+        // and score never move off their opening values. Saying "Pre-Game, Round 0/10"
+        // in the middle of a match is worse than admitting the feed is missing.
+        if (!_state.HasPhaseFeed && _state.IsActive)
+        {
+            BlitzSkin.Pill("NO PHASE FEED", BlitzPalette.Warning);
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    "Referees post phases, rounds and the score in the league linkshell.\n" +
+                    "Without it those stay unknown — but actions, rolls and possession\n" +
+                    "are read from Yell and are still being tracked.");
+            }
+
+            ImGui.SameLine();
+            BlitzSkin.Muted("phase, round and score unknown — following play from Yell");
+
+            ImGui.SameLine();
+            if (_state.BallCarrier is not null)
+                BlitzSkin.Pill(_state.BallCarrier, BlitzPalette.Ball);
+
+            return;
+        }
+
         BlitzSkin.PhaseChip(_state.Phase);
 
         // Nothing below is live any more, so the row stops pretending it is: no clock

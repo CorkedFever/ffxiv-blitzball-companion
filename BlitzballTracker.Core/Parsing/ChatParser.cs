@@ -110,7 +110,10 @@ public partial class ChatParser
 
         // --- Phase / structure messages (from ref) ---
         if (TryParsePhaseMessage(message, timestamp))
+        {
+            _state.HasPhaseFeed = true;
             return true;
+        }
 
         // --- Referee corrections: flags, grace, re-rolls ---
         if (TryParseCorrection(sender, message, timestamp))
@@ -130,7 +133,10 @@ public partial class ChatParser
 
         // --- Player action declarations ---
         if (TryParseAction(sender, message, timestamp))
+        {
+            ReportMissingPhaseFeed(timestamp);
             return true;
+        }
 
         // --- Status effects (DAZED, GRACE) ---
         if (TryParseStatus(message, timestamp))
@@ -1124,6 +1130,28 @@ public partial class ChatParser
         }
 
         return true;
+    }
+
+    private bool _warnedAboutPhaseFeed;
+
+    /// <summary>
+    /// Say once when play is arriving but the phase calls are not.
+    ///
+    /// Referees post the structure — phases, rounds, the score — in the league's
+    /// cross-world linkshell, while players declare and roll in Yell. A spectator sees
+    /// the second and not the first, so the match reads as stuck before kickoff while
+    /// actions pour in. That is not a fault, and it should not look like one.
+    /// </summary>
+    private void ReportMissingPhaseFeed(DateTime timestamp)
+    {
+        if (_state.HasPhaseFeed || _warnedAboutPhaseFeed) return;
+
+        _warnedAboutPhaseFeed = true;
+
+        _state.PlayByPlay.Add(
+            $"[{timestamp:HH:mm:ss}] ⚑ Following play, but no referee phase calls have arrived. " +
+            "Those are posted in the league linkshell, so without it the phase, round and " +
+            "score stay unknown. Actions, rolls and possession are still being tracked.");
     }
 
     /// <summary>

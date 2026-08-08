@@ -345,6 +345,17 @@ public partial class BlitzGame
     public bool IsFinished { get; set; }
 
     /// <summary>
+    /// Whether any referee phase call has been seen.
+    ///
+    /// Referees post the structure — phases, rounds, the score — in the league's
+    /// cross-world linkshell, while players declare and roll in Yell. A spectator
+    /// without the linkshell sees the play but never the structure, so the phase, round
+    /// and score stay at their opening values however long the match runs. Worth
+    /// distinguishing from a match that genuinely has not started.
+    /// </summary>
+    public bool HasPhaseFeed { get; set; }
+
+    /// <summary>
     /// Which team attacks which goal. Home attacks 4 (yellow) in Set 1, D (red) in Set 2.
     /// </summary>
     public Waymark HomeGoalTarget { get; set; } = Waymark.Four;
@@ -842,6 +853,7 @@ public partial class BlitzGame
         BallTeam = null;
         RoundsRemaining = 0;
         IsFinished = false;
+        HasPhaseFeed = false;
         HomeGoalTarget = Waymark.Four;
         AwayGoalTarget = Waymark.D;
 

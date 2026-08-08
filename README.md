@@ -69,6 +69,16 @@ plugin. Open it with `/blitz`.
 
 </details>
 
+### The match arrives on two channels
+
+Players declare and roll in **Yell**. Referees post the structure — phases, rounds and
+the score — in the league's **cross-world linkshell**.
+
+With both, everything is tracked. With only Yell, which is what a spectator outside the
+league sees, actions, rolls, contests and possession are still followed, but the phase,
+round and score stay unknown — and the tracker says so rather than reporting Pre-Game
+for an hour.
+
 ### Before a match
 
 Load a roster first, on the **Roster** screen. This is not optional and the tracker will
