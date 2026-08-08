@@ -144,6 +144,37 @@ public partial class BlitzGame
         ScoreIsDerived = true;
     }
 
+    /// <summary>Another name each side goes by, usually the city they represent.</summary>
+    public string? HomeAlias { get; set; }
+    public string? AwayAlias { get; set; }
+
+    public bool MatchesHome(string spoken) => NamesTheSameTeam(spoken, HomeTeam, HomeAlias);
+    public bool MatchesAway(string spoken) => NamesTheSameTeam(spoken, AwayTeam, AwayAlias);
+
+    /// <summary>
+    /// Whether a name a referee used refers to this side.
+    ///
+    /// Names are shortened in passing — "Barracuda ball" for the Barracudas — so either
+    /// containing the other counts. The alias covers the other habit, of calling a team
+    /// by its city, which is a different word entirely and cannot be matched by shape.
+    /// </summary>
+    private static bool NamesTheSameTeam(string spoken, string rostered, string? alias)
+    {
+        spoken = spoken.Trim();
+        if (spoken.Length == 0) return false;
+
+        if (rostered.Length > 0 &&
+            (spoken.Contains(rostered, StringComparison.OrdinalIgnoreCase) ||
+             rostered.Contains(spoken, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return alias is { Length: > 0 } &&
+               (spoken.Contains(alias, StringComparison.OrdinalIgnoreCase) ||
+                alias.Contains(spoken, StringComparison.OrdinalIgnoreCase));
+    }
+
     private void ResetScoreDerivation()
     {
         GoalsSeen = 0;

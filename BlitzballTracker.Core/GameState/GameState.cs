@@ -682,6 +682,8 @@ public partial class BlitzGame
 
         HomeTeam = roster.HomeTeam;
         AwayTeam = roster.AwayTeam;
+        HomeAlias = roster.HomeAlias;
+        AwayAlias = roster.AwayAlias;
 
         Players.Clear();
         foreach (var entry in roster.Entries)

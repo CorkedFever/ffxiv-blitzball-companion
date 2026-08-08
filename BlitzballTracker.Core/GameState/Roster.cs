@@ -33,6 +33,16 @@ public sealed class Roster
     public string HomeTeam { get; set; } = string.Empty;
     public string AwayTeam { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Another name a side is called, usually the city it represents.
+    ///
+    /// Referees use the two interchangeably — "Limsa ball" and "Barracuda ball" mean
+    /// the same side — and possession at a Blitzon is read from exactly that call, so a
+    /// side whose city is not known here has its goals counted but not attributed.
+    /// </summary>
+    public string? HomeAlias { get; set; }
+    public string? AwayAlias { get; set; }
+
     // Settable rather than init-only so the plugin can round-trip saved rosters
     // through its JSON configuration.
     public List<RosterEntry> Entries { get; set; } = [];

@@ -107,6 +107,52 @@ public class RealLogCoverageTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// Replay each recording the way playback actually does it — through the roster
+    /// stored in the file — and report what comes out.
+    ///
+    /// This is the one that reflects what a person sees when they press Play, so it is
+    /// where a wrong header shows up as an empty match rather than as a wrong one.
+    /// </summary>
+    [RecordedMatchFact]
+    public void ReplayingThroughTheEmbeddedRosterReportsWhatItFinds()
+    {
+        foreach (var file in Recordings())
+        {
+            var lines = File.ReadAllLines(file);
+
+            var roster = RosterHeader.Read(lines);
+            if (roster is null)
+            {
+                output.WriteLine($"{Path.GetFileName(file)}: no roster in the header.");
+                continue;
+            }
+
+            var game = new BlitzGame();
+            game.ApplyRoster(roster);
+
+            var parser = new ChatParser(game) { LocalPlayerName = roster.RecordedBy };
+
+            LogReplay.Replay(
+                lines.Select(LogReplay.ParseLine).Where(l => l is not null).Select(l => l!).ToList(),
+                parser);
+
+            var rolled = lines
+                .Select(l => Roll.Match(l))
+                .Where(m => m.Success)
+                .Select(m => PlayerNames.StripWorld(m.Groups[1].Value))
+                .Distinct()
+                .Count(n => game.Players.ContainsKey(n));
+
+            output.WriteLine(
+                $"{Path.GetFileName(file)}: {game.HomeTeam} {game.Score.Home}:{game.Score.Away} " +
+                $"{game.AwayTeam}  " +
+                $"(derived: {game.ScoreIsDerived}, certain: {game.ScoreIsCertain}, " +
+                $"goals seen: {game.GoalsSeen})  " +
+                $"{rolled} rostered players rolled, {game.PlayByPlay.Count} play-by-play lines.");
+        }
+    }
+
     private static IEnumerable<string> Recordings() =>
         Directory.GetFiles(Fixtures.RecordingsDirectory!, "*.txt").OrderBy(f => f);
 

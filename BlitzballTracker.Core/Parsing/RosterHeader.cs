@@ -35,6 +35,12 @@ public static class RosterHeader
         builder.AppendLine($"{Prefix}home {roster.HomeTeam}");
         builder.AppendLine($"{Prefix}away {roster.AwayTeam}");
 
+        if (!string.IsNullOrWhiteSpace(roster.HomeAlias))
+            builder.AppendLine($"{Prefix}homealias {roster.HomeAlias}");
+
+        if (!string.IsNullOrWhiteSpace(roster.AwayAlias))
+            builder.AppendLine($"{Prefix}awayalias {roster.AwayAlias}");
+
         if (!string.IsNullOrWhiteSpace(localPlayer))
             builder.AppendLine($"{Prefix}you {localPlayer}");
 
@@ -85,6 +91,14 @@ public static class RosterHeader
 
                 case "away":
                     roster.AwayTeam = value;
+                    break;
+
+                case "homealias":
+                    roster.HomeAlias = value;
+                    break;
+
+                case "awayalias":
+                    roster.AwayAlias = value;
                     break;
 
                 case "you":

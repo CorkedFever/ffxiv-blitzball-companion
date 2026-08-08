@@ -189,6 +189,21 @@ public sealed class RosterView : IShellView
             _draft.AwayTeam = away;
             RetagSquad(isHome: false);
         }
+
+        // Referees use a side's city and its name interchangeably — "Limsa ball" and
+        // "Barracuda ball" are the same call — and possession at a Blitzon is read from
+        // exactly that. Without the city, those goals get counted but not attributed.
+        var homeAlias = _draft.HomeAlias ?? string.Empty;
+        var awayAlias = _draft.AwayAlias ?? string.Empty;
+
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.InputTextWithHint("##homecity", "also called (city, optional)", ref homeAlias, 64))
+            _draft.HomeAlias = homeAlias.Trim().Length == 0 ? null : homeAlias;
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.InputTextWithHint("##awaycity", "also called (city, optional)", ref awayAlias, 64))
+            _draft.AwayAlias = awayAlias.Trim().Length == 0 ? null : awayAlias;
     }
 
     /// <summary>

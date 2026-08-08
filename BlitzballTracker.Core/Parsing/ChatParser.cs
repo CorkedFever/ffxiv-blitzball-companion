@@ -123,6 +123,11 @@ public partial class ChatParser
         if (TryParseScore(message))
             return true;
 
+        // Scorekeepers call the score in plain speech far more often than they post it
+        // in brackets, so this is the form that actually turns up.
+        if (TrySpokenScore(message))
+            return true;
+
         // --- Ball state messages (from scorekeeper) ---
         if (TryParseBallState(sender, message, timestamp))
             return true;
@@ -651,6 +656,59 @@ public partial class ChatParser
     #endregion
 
     #region Score
+
+    /// <summary>
+    /// Read a score the scorekeeper called in plain speech.
+    ///
+    /// "Vidraal 2 - 1 Barracudas." is how it is actually announced — no brackets, a
+    /// hyphen rather than a colon, and often trailing a shout ("Halftiiiiime! ..."). A
+    /// bare "N - M" between two words is far too common in ordinary chat to trust on
+    /// shape alone, so both names are checked against the roster before it is believed.
+    /// </summary>
+    private bool TrySpokenScore(string message)
+    {
+        var final = RegexFinalScore().Match(message);
+        if (final.Success &&
+            TryOrientScore(final.Groups[1].Value, int.Parse(final.Groups[2].Value),
+                           final.Groups[3].Value, int.Parse(final.Groups[4].Value)))
+        {
+            return true;
+        }
+
+        foreach (Match m in RegexScoreSpoken().Matches(message))
+        {
+            if (TryOrientScore(m.Groups[1].Value, int.Parse(m.Groups[2].Value),
+                               m.Groups[4].Value, int.Parse(m.Groups[3].Value)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Accept a spoken score only when both sides name teams we know, and put them the
+    /// right way round. Scorekeepers write whichever side they please first.
+    /// </summary>
+    private bool TryOrientScore(string firstTeam, int firstScore, string secondTeam, int secondScore)
+    {
+        if (!_state.HasRoster || _state.HomeTeam.Length == 0) return false;
+
+        var firstIsHome = _state.MatchesHome(firstTeam);
+        var firstIsAway = _state.MatchesAway(firstTeam);
+        var secondIsHome = _state.MatchesHome(secondTeam);
+        var secondIsAway = _state.MatchesAway(secondTeam);
+
+        if (firstIsHome && secondIsAway)
+            _state.AdoptPostedScore(new Score(firstScore, secondScore));
+        else if (firstIsAway && secondIsHome)
+            _state.AdoptPostedScore(new Score(secondScore, firstScore));
+        else
+            return false;
+
+        return true;
+    }
 
     private bool TryParseScore(string message)
     {
@@ -1258,25 +1316,13 @@ public partial class ChatParser
             return RestartReading.Unknown;
         }
 
-        if (MatchesTeam(team, _state.HomeTeam)) return RestartReading.HomeBehind;
-        if (MatchesTeam(team, _state.AwayTeam)) return RestartReading.AwayBehind;
+        if (_state.MatchesHome(team)) return RestartReading.HomeBehind;
+        if (_state.MatchesAway(team)) return RestartReading.AwayBehind;
 
         _state.PlayByPlay.Add(
             $"[{timestamp:HH:mm:ss}] ⚑ BLITZON gives the ball to \"{team}\", which matches " +
             $"neither {_state.HomeTeam} nor {_state.AwayTeam}.");
         return RestartReading.Unknown;
-    }
-
-    /// <summary>
-    /// Referees shorten team names in passing — "Barracuda ball" for the Barracudas — so
-    /// either name containing the other is close enough to be the same side.
-    /// </summary>
-    private static bool MatchesTeam(string spoken, string rostered)
-    {
-        if (spoken.Length == 0 || rostered.Length == 0) return false;
-
-        return spoken.Contains(rostered, StringComparison.OrdinalIgnoreCase)
-            || rostered.Contains(spoken, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1290,8 +1336,8 @@ public partial class ChatParser
         if (deficit <= 0) return false;
 
         bool homeBehind;
-        if (MatchesTeam(team, _state.HomeTeam)) homeBehind = true;
-        else if (MatchesTeam(team, _state.AwayTeam)) homeBehind = false;
+        if (_state.MatchesHome(team)) homeBehind = true;
+        else if (_state.MatchesAway(team)) homeBehind = false;
         else return false;
 
         _state.AdoptHalftimeDeficit(deficit, homeBehind);
@@ -3349,6 +3395,20 @@ public partial class ChatParser
 
     [GeneratedRegex(@"\[\[\s*(\w[\w\s]*?)\s+(\d+):(\d+)\s+(\w[\w\s]*?)\s*\]\]")]
     private static partial Regex RegexScore();
+
+    // How scorekeepers actually call it, in plain Yell: "Vidraal 2 - 1 Barracudas."
+    // Also catches "Halftiiiiime! Vidraal 1 - 0 Barracudas." because the score is read
+    // out of the tail rather than anchored to the start.
+    //
+    // Deliberately loose, and safe only because both names are checked against the
+    // roster before it is believed — a bare "N - M" between two words is far too common
+    // in ordinary chat to trust on shape alone.
+    [GeneratedRegex(@"([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*)?)\s+(\d+)\s*[-–—:]\s*(\d+)\s+([A-Za-z][\w']*(?:\s+[A-Za-z][\w']*)?)")]
+    private static partial Regex RegexScoreSpoken();
+
+    // "[Final score: Vidraal - 2, Barracuda - 1]"
+    [GeneratedRegex(@"Final\s+score\s*:\s*([\w'\s]+?)\s*[-–]\s*(\d+)\s*,\s*([\w'\s]+?)\s*[-–]\s*(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexFinalScore();
 
     [GeneratedRegex(@"\[\[\s*([\w\s']+?)\s*[-,]?\s*BALL\s*GET\s*!?\s*\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexBallGet();
