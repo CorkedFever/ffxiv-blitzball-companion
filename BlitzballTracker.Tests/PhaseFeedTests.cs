@@ -98,6 +98,29 @@ public class PhaseFeedTests
         Assert.True(victim.IsDazed, "A contest in Yell resolves without any phase call.");
     }
 
+    /// <summary>
+    /// A recording keeps the referee's channel, or it cannot be replayed into a full
+    /// match later — the phases and rounds all come through there.
+    /// </summary>
+    [Theory]
+    [InlineData("CrossLinkShell")]
+    [InlineData("CWLS")]
+    [InlineData("Yell")]
+    [InlineData("Dice Roll")]
+    public void ARecordedRefereeChannelReplays(string channel)
+    {
+        Assert.True(LogReplay.IsRelevantChannel(channel));
+    }
+
+    [Theory]
+    [InlineData("Party")]
+    [InlineData("Linkshell")]
+    [InlineData("Say")]
+    public void PrivateChannelsAreLeftOutOfReplay(string channel)
+    {
+        Assert.False(LogReplay.IsRelevantChannel(channel));
+    }
+
     [Fact]
     public void ResettingForgetsThatTheFeedWasSeen()
     {

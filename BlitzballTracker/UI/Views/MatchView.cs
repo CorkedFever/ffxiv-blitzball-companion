@@ -13,7 +13,8 @@ public sealed class MatchView(
     BlitzGame state,
     GameRecorder recorder,
     LiveFeedClient liveFeed,
-    MatchDriver driver) : IShellView
+    MatchDriver driver,
+    string recordingsDirectory) : IShellView
 {
     public string Title => "Match";
     public string Icon => ((char)SeIconChar.Circle).ToString();
@@ -22,6 +23,9 @@ public sealed class MatchView(
     private readonly GameRecorder _recorder = recorder;
     private readonly LiveFeedClient _liveFeed = liveFeed;
     private readonly MatchDriver _driver = driver;
+    private readonly string _recordingsDirectory = recordingsDirectory;
+
+    private string _recordingStatus = string.Empty;
 
     private readonly BlitzsphereWidget _sphere = new(state);
 
@@ -147,8 +151,55 @@ public sealed class MatchView(
         BlitzSkin.MutedWrapped(detail);
     }
 
+    /// <summary>
+    /// Start and stop recording without leaving the match.
+    ///
+    /// It is on this screen because that is where you are when a match is about to
+    /// start, and a recording you forgot to begin is not recoverable afterwards.
+    /// Lines are flushed as they arrive, so a crash costs nothing already written.
+    /// </summary>
+    private void DrawRecordButton()
+    {
+        if (_recorder.IsRecording)
+        {
+            if (ImGui.Button($"■ Stop recording  ({_recorder.LinesRecorded} lines)", new Vector2(230, 0)))
+            {
+                var file = _recorder.CurrentFile;
+                _recorder.Stop();
+                _recordingStatus = file is null ? "Recording stopped." : $"Saved to {file}";
+            }
+        }
+        else
+        {
+            if (ImGui.Button("● Record match", new Vector2(150, 0)))
+            {
+                var path = _recorder.Start(_recordingsDirectory, _state.CurrentRoster);
+
+                _recordingStatus = _state.HasRoster
+                    ? $"Recording to {path}"
+                    : $"Recording to {path} — no roster loaded, so the file will not name the lineup.";
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    "Writes the match chat to a file you can replay later.\n" +
+                    "The roster is written into it too, so the recording still\n" +
+                    "makes sense months from now.");
+            }
+        }
+
+        if (_recordingStatus.Length == 0) return;
+
+        ImGui.SameLine();
+        BlitzSkin.Muted(_recordingStatus);
+    }
+
     private void DrawStatusPills()
     {
+        DrawRecordButton();
+        ImGui.Spacing();
+
         var drew = false;
 
         if (_recorder.IsRecording)

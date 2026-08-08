@@ -37,7 +37,10 @@ public static partial class LogReplay
         // single-channel exports, so there is nothing to filter on.
         if (string.IsNullOrEmpty(channel)) return true;
 
-        return channel is "Yell" or "Dice Roll" or "Field Marker" or "Shout";
+        // CrossLinkShell carries the referee's phase calls, so a recording replays into
+        // a full match only if it is kept.
+        return channel is "Yell" or "Dice Roll" or "Field Marker" or "Shout"
+                       or "CrossLinkShell" or "CWLS";
     }
 
     /// <summary>

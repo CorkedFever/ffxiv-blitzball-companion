@@ -79,6 +79,11 @@ public sealed class GameRecorder : IDisposable
             0x49 or 0xC9 => "Field Marker",
             0x0E => "Party",
             0x0A => "Say",
+
+            // The referee's channel. A recording without it cannot be replayed into a
+            // full match later, because the phases and rounds all come through here.
+            0x25 or (>= 0x65 and <= 0x6B) => "CrossLinkShell",
+
             _ => $"Chat_{code:X2}",
         };
     }

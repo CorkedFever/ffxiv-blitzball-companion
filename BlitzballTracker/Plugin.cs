@@ -1,4 +1,5 @@
 using Dalamud.Game.Chat;
+using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -88,7 +89,7 @@ public sealed class Plugin : IDalamudPlugin
             _log.Info($"Restored roster: {saved.HomeTeam} vs {saved.AwayTeam} ({saved.Entries.Count} players).");
         }
 
-        _matchView = new MatchView(_gameState, _recorder, _liveFeed, _driver);
+        _matchView = new MatchView(_gameState, _recorder, _liveFeed, _driver, recordings);
 
         IShellView[] views =
         [
@@ -125,11 +126,34 @@ public sealed class Plugin : IDalamudPlugin
             _shell.Navigate("Roster");
     }
 
+    /// <summary>
+    /// The channels a match is played and called on.
+    ///
+    /// Players declare and roll in Yell. Referees call the phases in the league's
+    /// cross-world linkshell, so that is read too — without it the phase, round and
+    /// score never move for anyone, however clearly they can see the calls.
+    ///
+    /// Ordinary linkshells and party chat are deliberately left out. The match needs
+    /// the referee's channel and no more.
+    /// </summary>
+    private static bool IsMatchChannel(XivChatType kind)
+    {
+        if (kind is XivChatType.CrossLinkShell1 or XivChatType.CrossLinkShell2
+                 or XivChatType.CrossLinkShell3 or XivChatType.CrossLinkShell4
+                 or XivChatType.CrossLinkShell5 or XivChatType.CrossLinkShell6
+                 or XivChatType.CrossLinkShell7 or XivChatType.CrossLinkShell8)
+        {
+            return true;
+        }
+
+        // Yell, the /random result, and field-marker system lines.
+        var code = (ushort)kind & 0xFF;
+        return code is 0x1E or 0x4A or 0x49 or 0xC9;
+    }
+
     private void OnChatMessage(IHandleableChatMessage chat)
     {
-        // We care about Yell (0x1E), Dice Roll (0x4A), and Field Marker (0x49/0xC9)
-        var typeCode = (ushort)chat.LogKind & 0xFF;
-        if (typeCode is not (0x1E or 0x4A or 0x49 or 0xC9))
+        if (!IsMatchChannel(chat.LogKind))
             return;
 
         var senderText = chat.Sender.TextValue;
