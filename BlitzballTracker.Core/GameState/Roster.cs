@@ -38,6 +38,16 @@ public sealed class Roster
     public List<RosterEntry> Entries { get; set; } = [];
 
     /// <summary>
+    /// Who was at the keyboard when this was recorded, when it came from a recording.
+    ///
+    /// The game writes your own dice as "You roll a 40" and everybody else's by name,
+    /// so a recording made by someone who is playing carries rolls that name nobody.
+    /// Carrying the recorder's name alongside the lineup is what lets a replay put
+    /// those rolls back on the right player.
+    /// </summary>
+    public string? RecordedBy { get; set; }
+
+    /// <summary>
     /// Entries that actually name somebody.
     ///
     /// The editor pads both squads to six rows so the grid stays stable while typing,

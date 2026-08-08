@@ -99,6 +99,56 @@ public class RecordingRoundTripTests
     }
 
     /// <summary>
+    /// A recording made by somebody who is playing has to say who they were.
+    ///
+    /// The game writes your own dice as "You roll a 40" and everyone else's by name. The
+    /// plugin knows who you are while it runs, but the file does not, so without this
+    /// line every roll the recorder made is unattributable — and it is their own team
+    /// that ends up with a player who apparently never rolled all match.
+    /// </summary>
+    [Fact]
+    public void TheRecordersOwnRollsSurviveIntoTheReplay()
+    {
+        var roster = MatchSimulator.StandardRoster();
+        var me = roster.Entries.First(e => e.Role == PlayerRole.LeftForward);
+
+        var recorded = new List<string>();
+        recorded.AddRange(RosterHeader.Write(roster, me.Name)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+        recorded.Add(Line("CrossLinkShell", "Match Referee", "<< OUTER PHASE (A/B/1/2) >> Start!"));
+        recorded.Add(Line("Dice Roll", "", "Random! You roll a 73 (out of 100)."));
+
+        var recovered = RosterHeader.Read(recorded);
+        Assert.NotNull(recovered);
+        Assert.Equal(me.Name, recovered!.RecordedBy);
+
+        var game = new BlitzGame();
+        game.ApplyRoster(recovered);
+
+        var parser = new ChatParser(game) { LocalPlayerName = recovered.RecordedBy };
+
+        LogReplay.Replay(
+            recorded.Select(LogReplay.ParseLine).Where(l => l is not null).Select(l => l!).ToList(),
+            parser);
+
+        Assert.Equal(73, game.Players[me.Name].PhaseRoll);
+    }
+
+    /// <summary>Recording as a spectator names nobody, and must stay valid.</summary>
+    [Fact]
+    public void ARecordingWithNoRecorderNamedIsStillFine()
+    {
+        var roster = MatchSimulator.StandardRoster();
+
+        var recovered = RosterHeader.Read(
+            RosterHeader.Write(roster).Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+        Assert.NotNull(recovered);
+        Assert.Null(recovered!.RecordedBy);
+    }
+
+    /// <summary>
     /// A recording without its roster header is only half a record: the lineup is the
     /// one thing chat never carries, so nothing in it can be attributed later.
     /// </summary>

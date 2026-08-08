@@ -197,7 +197,13 @@ public sealed class Plugin : IDalamudPlugin
 
         // "You roll a ..." lines are attributed to whoever is logged in.
         if (string.IsNullOrEmpty(_parser.LocalPlayerName))
+        {
             _parser.LocalPlayerName = _objectTable.LocalPlayer?.Name.TextValue;
+
+            // The recorder needs it too, and for a different reason: the name has to go
+            // into the file, or a recording made while playing loses its own rolls.
+            _recorder.LocalPlayerName = _parser.LocalPlayerName;
+        }
 
         // Stand-in bodies are derived from tracked state, so they follow playback.
         // They are placed on whichever arena is actually in use: the real waymarks

@@ -118,6 +118,13 @@ public sealed class MatchDriver(
         if (embedded is not null)
         {
             _state.ApplyRoster(embedded);
+
+            // A recording made by somebody who was playing has their own dice in it as
+            // "You roll a 40". Only the header says who "You" was, so without this every
+            // roll they made goes unattributed — and it is their own team's player that
+            // ends up looking like they never rolled.
+            if (embedded.RecordedBy is { Length: > 0 } recorder)
+                _parser.LocalPlayerName = recorder;
         }
         else if (!_state.HasRoster)
         {

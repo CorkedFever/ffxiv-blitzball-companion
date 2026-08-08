@@ -17,6 +17,16 @@ public sealed class GameRecorder : IDisposable
     public int LinesRecorded { get; private set; }
 
     /// <summary>
+    /// Who is at the keyboard, so their own rolls survive into the recording.
+    ///
+    /// The game writes your dice as "You roll a 40" and everyone else's by name. While
+    /// the plugin is running it knows who you are, but the file does not, so a recording
+    /// made by somebody who is playing loses every one of their own rolls the moment it
+    /// is replayed. Kept up to date by the plugin.
+    /// </summary>
+    public string? LocalPlayerName { get; set; }
+
+    /// <summary>
     /// Start recording to a new file in the specified directory.
     ///
     /// When a roster is supplied it is written into the file's header, so the
@@ -36,7 +46,7 @@ public sealed class GameRecorder : IDisposable
         };
 
         if (roster is { Entries.Count: > 0 })
-            _writer.Write(Core.Parsing.RosterHeader.Write(roster));
+            _writer.Write(Core.Parsing.RosterHeader.Write(roster, LocalPlayerName));
 
         _recording = true;
         LinesRecorded = 0;

@@ -18,13 +18,25 @@ public static class RosterHeader
 {
     private const string Prefix = "#blitz ";
 
-    public static string Write(Roster roster)
+    /// <summary>
+    /// Write the lineup, and who was recording it.
+    ///
+    /// <paramref name="localPlayer"/> matters more than it looks. The game writes your
+    /// own dice as "You roll a 40" and everyone else's by name, so a recording made by
+    /// somebody who is playing has a stack of rolls in it that name nobody. Live that is
+    /// fine — the plugin knows who you are — but nothing in the file does, and by the
+    /// time anyone replays it the rolls are unattributable for good. One line fixes it.
+    /// </summary>
+    public static string Write(Roster roster, string? localPlayer = null)
     {
         var builder = new StringBuilder();
 
         builder.AppendLine($"{Prefix}version 1");
         builder.AppendLine($"{Prefix}home {roster.HomeTeam}");
         builder.AppendLine($"{Prefix}away {roster.AwayTeam}");
+
+        if (!string.IsNullOrWhiteSpace(localPlayer))
+            builder.AppendLine($"{Prefix}you {localPlayer}");
 
         foreach (var entry in roster.Entries)
         {
@@ -73,6 +85,10 @@ public static class RosterHeader
 
                 case "away":
                     roster.AwayTeam = value;
+                    break;
+
+                case "you":
+                    roster.RecordedBy = value;
                     break;
 
                 case "player":
