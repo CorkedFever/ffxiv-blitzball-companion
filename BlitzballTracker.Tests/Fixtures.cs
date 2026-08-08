@@ -23,6 +23,28 @@ public static class Fixtures
     public static bool HasRealMatchSample => File.Exists(RealMatchSample);
 
     /// <summary>
+    /// A folder of recordings made by the plugin's own record button, for measuring how
+    /// much of a real match the parser actually resolves.
+    ///
+    /// Set <c>BLITZ_LOGS</c> to point at one — the plugin writes them to its config
+    /// directory under <c>recordings/</c>. Kept out of the repository for the same
+    /// reason as the sample above: they are somebody's real match.
+    /// </summary>
+    public static string? RecordingsDirectory
+    {
+        get
+        {
+            var configured = Environment.GetEnvironmentVariable("BLITZ_LOGS");
+            return string.IsNullOrWhiteSpace(configured) ? null : configured;
+        }
+    }
+
+    public static bool HasRecordings =>
+        RecordingsDirectory is { } dir &&
+        Directory.Exists(dir) &&
+        Directory.EnumerateFiles(dir, "*.txt").Any();
+
+    /// <summary>
     /// Match officials and commentators from the sampled match.
     ///
     /// Two of them post bracketed game notation on behalf of others: O'looqa Honji

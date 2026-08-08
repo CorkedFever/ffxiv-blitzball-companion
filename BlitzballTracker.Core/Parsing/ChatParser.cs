@@ -3087,7 +3087,10 @@ public partial class ChatParser
     [GeneratedRegex(@"PASS\s+COMPLETE\s+to\s+([\w\s']+?)\s*\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexPassComplete();
 
-    [GeneratedRegex(@"CAUGHT(?:\s+by\s+([\w\s']+?))?\s*\]", RegexOptions.IgnoreCase)]
+    // Referees write this as "<< CAUGHT BY Akii Malaguld! >>" as often as with square
+    // brackets, so the closer has to be either — matching only "]" missed every
+    // catch the officials actually called.
+    [GeneratedRegex(@"CAUGHT(?:\s+by\s+([\w\s'\-]+?))?\s*[!]?\s*(?:\]|>>)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexCaught();
 
     // The game puts a dice glyph between "a" and the number — "rolls a  7" — and it is
@@ -3096,7 +3099,12 @@ public partial class ChatParser
     // The name is captured loosely and normalised afterwards, because a crossworld
     // roller arrives as "Name<glyph>World" and a character class that stops at the
     // glyph captures the world instead of the player.
-    [GeneratedRegex(@"(?:Random!\s*)?(.+?)\s+rolls\s+a\s+\D{0,4}?(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
+    // The /random line arrives with no sender at all — "[Dice Roll] : Random! Name rolls
+    // a 40" — so the leading punctuation is part of the text the name is cut from. With
+    // a permissive capture the lazy match starts before "Random!" and swallows it, and
+    // every roll is then credited to a player called ": Random! Name". Excluding colons
+    // and exclamation marks is enough: neither can appear in a character name.
+    [GeneratedRegex(@"(?:Random!\s*)?([^:!]+?)\s+rolls\s+a\s+\D{0,4}?(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexDiceRoll();
 
     [GeneratedRegex(@"You\s+roll\s+a\s+\D{0,4}?(\d+)\s+\(out\s+of\s+100\)", RegexOptions.IgnoreCase)]
@@ -3108,16 +3116,20 @@ public partial class ChatParser
     // Secondary pattern: [ACTION] [TargetName] — used by RALLY
     // "[TACKLE] Name!" and "[RALLY] on: Name!" — the second is how rally names its
     // target in practice, and the colon stopped the capture dead.
-    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]\s*(?:on\s*:?\s*)?\[?([\w\s']+?)\]?!", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVES?|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]\s*(?:on\s*:?\s*)?\[?([\w\s'\-]+?)\]?!", RegexOptions.IgnoreCase)]
     private static partial Regex RegexActionWithSeparateTarget();
 
     // Tertiary pattern: [ACTION]s to [Target] or [ACTION] to Target.
-    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]s?\s+(?:to|toward|towards)\s+\[?([\w\s']+?)\]?\.?", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\[(TACKLE|BLOCK|MOVES?|DIVE|PASS|SHOOT!?|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\]s?\s+(?:the\s+[Bb]all\s+)?(?:to|toward|towards)\s+\[?([\w\s'\-]+?)\]?\.?", RegexOptions.IgnoreCase)]
     private static partial Regex RegexActionLooseTarget();
 
     // Quaternary pattern: unbracketed "attempts to TACKLE PlayerName!" (no [ ] brackets)
     // Target is limited to capitalized words (FFXIV name format: "First Last")
-    [GeneratedRegex(@"attempts?\s+to\s+(TACKLE|BLOCK|MOVE|DIVE|PASS|SHOOT|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\s+([A-Z][\w']+(?:\s+[A-Z][\w']+)*)", RegexOptions.None)]
+    // Hyphens are load-bearing in FFXIV surnames — Abd-al-daiya, Djt-marouc,
+    // Iron-breaker — and leaving them out of the class does not fail to match, it
+    // matches a prefix. "Qasim Abd-al-daiya" silently becomes "Qasim Abd", which
+    // resolves to nobody, and the action is lost rather than reported.
+    [GeneratedRegex(@"attempts?\s+to\s+(TACKLE|BLOCK|MOVES?|DIVE|PASS|SHOOT|GUARD|TAUNT|RALLY|SHOVE|SURVEY|RUSH)\s+([A-Z][\w'\-]+(?:\s+[A-Z][\w'\-]+)*)", RegexOptions.None)]
     private static partial Regex RegexActionUnbracketed();
 
     // Fallback waymark finder: matches waymark letter/number after "to", arrows, or in brackets
@@ -3132,12 +3144,16 @@ public partial class ChatParser
     [GeneratedRegex(@"[+](\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexModifier();
 
-    [GeneratedRegex(@"DAZED\s*[-–]\s*([\w\s']+)", RegexOptions.IgnoreCase)]
+    // The separator is a hyphen and so are half the surnames — "[[ DAZED - Qasim
+    // Abd-al-daiya ]]". The leading "[-–]" eats the separator, so the capture can safely
+    // keep hyphens; without them it stops mid-surname and dazes a player who does not
+    // exist, leaving the real one standing.
+    [GeneratedRegex(@"DAZED\s*[-–]\s*([\w\s'\-]+)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexDazed();
 
     // Referees write "GRACE GIVEN -- Name", "GRACE GIVEN - Name" and "Grace Given Name",
     // so the separator has to tolerate repeated or absent dashes.
-    [GeneratedRegex(@"GRACE\s+GIVEN\s*[-–—]*\s*([\w\s']+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"GRACE\s+GIVEN\s*[-–—]*\s*([\w\s'\-]+)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexGrace();
 
     // "[Flag]" and "[[FLAG]]" — a referee marking something wrong, with no name.

@@ -25,7 +25,7 @@ public static class PlayerNames
         // A crossworld name arrives as "Name<glyph>World", the glyph being one of the
         // game's own icons. Those live in the private use area, so cutting at the first
         // one strips the world without needing to know which icon was used — and there
-        // are several. Left unhandled, the world reads as part of the name.
+        // are several. This is the lucky case; the line below handles the usual one.
         for (var i = 0; i < s.Length; i++)
         {
             if (s[i] is < '' or > '') continue;
@@ -33,6 +33,12 @@ public static class PlayerNames
             s = s[..i].TrimEnd();
             break;
         }
+
+        // More often the glyph is already gone: it is a payload rather than a character,
+        // and flattening a chat line to text drops it. What arrives is "Akii
+        // MalaguldCactuar", with nothing at all marking where the name ends, so the world
+        // has to be recognised by name instead. See Worlds.Split.
+        s = Worlds.Split(s).Name;
 
         var bracket = s.LastIndexOf('[');
         if (bracket > 0 && s.EndsWith(']'))
@@ -59,7 +65,9 @@ public static class PlayerNames
             var world = s[(bracket + 1)..^1].Trim();
             return world.Length > 0 ? world : null;
         }
-        return null;
+
+        // The common case in live chat: no brackets, the world simply welded on the end.
+        return Worlds.Split(s).World;
     }
 
     /// <summary>
