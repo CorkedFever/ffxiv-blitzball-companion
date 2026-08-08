@@ -185,8 +185,15 @@ public sealed class Plugin : IDalamudPlugin
 
         try
         {
-            _waymarks.SyncPositions(_gameState, (player, declared, actual) =>
-                _gameState.PlayByPlay.Add($"[{now:HH:mm:ss}] ⚑ {player} is at {actual}, not {declared}."));
+            // Always follow the field, but only speak up once it is meant to be still.
+            // Before a kickoff everyone is swimming into formation at once, and calling
+            // each of those a fault buries the real ones.
+            _waymarks.SyncPositions(
+                _gameState,
+                _gameState.PositionsShouldBeSettled
+                    ? (player, declared, actual) =>
+                        _gameState.PlayByPlay.Add($"[{now:HH:mm:ss}] ⚑ {player} is at {actual}, not {declared}.")
+                    : null);
         }
         catch (Exception ex)
         {

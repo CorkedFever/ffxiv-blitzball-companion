@@ -1061,6 +1061,22 @@ public partial class BlitzGame
         && holder.IsGoalkeeper;
 
     /// <summary>
+    /// Whether the field is supposed to be standing still.
+    ///
+    /// Between a goal and the next kickoff, and through the huddles, players are simply
+    /// swimming into position — half a dozen of them at once. Watching the arena and
+    /// calling each of those a contradiction fills the log with faults that are really
+    /// just people getting where they are going.
+    ///
+    /// Once a phase is under way, position is meant to be settled, and the arena
+    /// disagreeing with the tracker is worth hearing about.
+    /// </summary>
+    public bool PositionsShouldBeSettled => Phase is
+        GamePhase.OuterPhase or GamePhase.OuterReposition or GamePhase.BallCarrierOuter or
+        GamePhase.InnerPhase or GamePhase.InnerReposition or GamePhase.BallCarrierInner or
+        GamePhase.BuzzerPhase;
+
+    /// <summary>
     /// Whether this player is one of the people acting right now.
     ///
     /// A phase activates one ring of the sphere and everyone standing in it acts at
