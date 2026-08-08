@@ -120,12 +120,23 @@ jobs:
           # array into a bare object, and Dalamud requires the file to be an array — so
           # the first release published a manifest no installer could read, while every
           # check that parsed it as JSON still looked fine.
-          ConvertTo-Json -InputObject @($manifest) -Depth 10 -AsArray |
-            Set-Content -LiteralPath $path -Encoding utf8
+          $json = ConvertTo-Json -InputObject @($manifest) -Depth 10 -AsArray
 
-          # Verify the shape as text, since parsing it proves nothing about this.
-          $written = Get-Content -LiteralPath $path -Raw
-          if (-not $written.TrimStart().StartsWith('[')) {
+          # utf8NoBOM explicitly: "utf8" means without a BOM in PowerShell 7 and with
+          # one in Windows PowerShell, and a byte order mark at the head of the file is
+          # enough to stop a strict JSON reader dead.
+          [System.IO.File]::WriteAllText(
+            (Join-Path $PWD $path), $json, (New-Object System.Text.UTF8Encoding($false)))
+
+          # Check the bytes, not the object. Both faults this guards against -- a bare
+          # object and a leading BOM -- survive every check that parses the file first.
+          $bytes = [System.IO.File]::ReadAllBytes((Join-Path $PWD $path))
+
+          if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            throw 'pluginmaster.json starts with a BOM; Dalamud may reject it.'
+          }
+
+          if ($bytes[0] -ne 0x5B) {
             throw 'pluginmaster.json is not a JSON array; Dalamud would reject it.'
           }
 
