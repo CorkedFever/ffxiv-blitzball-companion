@@ -3376,7 +3376,12 @@ public partial class ChatParser
 
     // "[Tie rolloff: Akii & Venn]", "[Tie reroll: Vesper - Verre]", "[Tie rolloff - Kesac - Verre]".
     // Officials use first names here, which ResolvePlayer already handles.
-    [GeneratedRegex(@"\[\s*Tie\s+(?:roll\s*off|re\s*roll)\s*[-:]?\s*([\w'\-]+)\s*(?:&|-|vs\.?|and)\s*([\w'\-]+)\s*\]", RegexOptions.IgnoreCase)]
+    //
+    // Both brackets are optional because referees type these at speed mid-match and drop
+    // one often enough to matter — "Tie reroll - Kauan - Tua]" is from a real game. A
+    // missed roll-off leaves a contest unresolved for the rest of the phase, so it is
+    // worth being generous about the punctuation.
+    [GeneratedRegex(@"\[?\s*Tie\s+(?:roll\s*off|re\s*roll)\s*[-:]?\s*([\w'\-]+)\s*(?:&|-|vs\.?|and)\s*([\w'\-]+)\s*\]?", RegexOptions.IgnoreCase)]
     private static partial Regex RegexTieRolloff();
 
     // Referees write this as "<< CAUGHT BY Akii Malaguld! >>" as often as with square
