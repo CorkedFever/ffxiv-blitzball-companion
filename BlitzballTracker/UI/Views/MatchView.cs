@@ -288,6 +288,20 @@ public sealed class MatchView(
             return;
         }
 
+        // Referees never post a score, so a tracked one has been worked out from the
+        // restarts (slide 15). Say so, rather than letting an inference sit in the same
+        // banner as a number somebody actually stated — and say plainly when a two-goal
+        // gap has left the split unpinned, since the total is still right.
+        if (_state.ScoreIsDerived)
+        {
+            ImGui.SameLine();
+            BlitzSkin.Pill(
+                _state.ScoreIsCertain
+                    ? $"SCORE DERIVED · {_state.GoalsSeen} goals"
+                    : $"SCORE UNCERTAIN · {_state.GoalsSeen} goals",
+                _state.ScoreIsCertain ? BlitzPalette.InkDim : BlitzPalette.Warning);
+        }
+
         // Overtime is its own scoreboard: the shootout tally is not match goals, and
         // showing only the match score during one hides the thing being decided.
         if (_state.Phase == GamePhase.Shootout)

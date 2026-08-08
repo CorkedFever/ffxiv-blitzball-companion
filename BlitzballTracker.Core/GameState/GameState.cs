@@ -293,7 +293,24 @@ public partial class BlitzGame
     public bool IsActive { get; set; }
     public string HomeTeam { get; set; } = string.Empty;  // Letter Lane (A-B side)
     public string AwayTeam { get; set; } = string.Empty;  // Number Lane (1-2 side)
-    public Score Score { get; set; }
+    private Score _score;
+
+    /// <summary>
+    /// Assigning a score means somebody stated it, which outranks anything derived from
+    /// restarts and stops the derivation second-guessing it. The reconstruction writes
+    /// through <c>SetDerivedScore</c> instead, so it does not claim to be told.
+    /// </summary>
+    public Score Score
+    {
+        get => _score;
+        set
+        {
+            _score = value;
+            ScoreWasPosted = true;
+            ScoreIsDerived = false;
+            ScoreIsCertain = true;
+        }
+    }
     public int Set { get; set; } = 1;                     // 1 or 2
     public int Round { get; set; }                        // 1-10 per set
     private GamePhase _phase = GamePhase.PreGame;
@@ -870,6 +887,7 @@ public partial class BlitzGame
         ClearBuzzerShot();
         ClearSurveyContests();
         BlitzoffVariant = BlitzoffKind.Standard;
+        ResetScoreDerivation();
 
         CurrentPhaseActions.Clear();
         GameLog.Clear();

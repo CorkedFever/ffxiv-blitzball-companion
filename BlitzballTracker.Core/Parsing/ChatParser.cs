@@ -142,6 +142,10 @@ public partial class ChatParser
         if (TryParseStatus(message, timestamp))
             return true;
 
+        // --- Officials calling an outcome outright ---
+        if (TryParseOfficialCall(message, timestamp))
+            return true;
+
         return false;
     }
 
@@ -158,17 +162,42 @@ public partial class ChatParser
             return true;
         }
 
-        // << BLITZOFF >>
+        // "[Teams, please reset for Blitzon.  Barracuda ball.]" — this lands before the
+        // << BLITZON >> itself, so it is held until the restart arrives.
+        var blitzonBall = RegexBlitzonBall().Match(message);
+        if (blitzonBall.Success)
+        {
+            _blitzonReceivingTeam = blitzonBall.Groups[1].Value.Trim();
+            return true;
+        }
+
+        // "[... had a +10 due to being down one point.]" — the halftime bonus is ten per
+        // point of deficit (slide 15), so saying it out loud states the gap exactly.
+        var deficit = RegexDeficitBonus().Match(message);
+        if (deficit.Success && TryReadDeficit(deficit, timestamp))
+            return true;
+
+        // << BLITZOFF >> and << BLITZON >>
         if (RegexBlitzoff().IsMatch(message))
         {
             var restartingSet = _state.Phase == GamePhase.Halftime;
+            var saysBlitzon = message.Contains("BLITZON", StringComparison.OrdinalIgnoreCase);
+
+            // Every restart bar the opening whistle and the second-set kickoff follows a
+            // goal, and which restart it is says what the score now looks like: a
+            // contested Blitzoff means the goal levelled it, a Blitzon means it did not
+            // and the side receiving is the side behind (slide 15). The referees never
+            // post a score, so this is the only reading of it anyone gets.
+            if (_state.Phase != GamePhase.PreGame && !restartingSet)
+                _state.RegisterGoalFromRestart(ReadRestart(saysBlitzon, timestamp));
 
             _state.Phase = GamePhase.Blitzoff;
             if (_state.Round == 0)
                 _state.Round = 1;
             _state.ResetPositions();
 
-            AnnounceBlitzoffVariant(restartingSet, timestamp);
+            AnnounceBlitzoffVariant(restartingSet, saysBlitzon, timestamp);
+            _blitzonReceivingTeam = null;
             return true;
         }
 
@@ -644,11 +673,13 @@ public partial class ChatParser
         {
             if (firstTeam.Equals(_state.HomeTeam, StringComparison.OrdinalIgnoreCase))
             {
-                _state.Score = new Score(firstScore, secondScore);
+                // A posted score outranks anything derived from restarts, and turns the
+                // derivation off — there is no need to infer what somebody has stated.
+                _state.AdoptPostedScore(new Score(firstScore, secondScore));
             }
             else if (firstTeam.Equals(_state.AwayTeam, StringComparison.OrdinalIgnoreCase))
             {
-                _state.Score = new Score(secondScore, firstScore);
+                _state.AdoptPostedScore(new Score(secondScore, firstScore));
             }
             else
             {
@@ -1165,12 +1196,26 @@ public partial class ChatParser
     /// The referees announce who actually ends up with it, so this reports what should
     /// happen rather than deciding it.
     /// </summary>
-    private void AnnounceBlitzoffVariant(bool restartingSet, DateTime timestamp)
+    private void AnnounceBlitzoffVariant(bool restartingSet, bool saysBlitzon, DateTime timestamp)
     {
+        // When the score is known, it decides the variant and the call is checked
+        // against it. When it is not — the usual case, since referees never post a
+        // score — the call is all there is, and reading the variant back off a score
+        // that was itself derived from these calls would be circular.
         _state.BlitzoffVariant =
             restartingSet ? BlitzoffKind.HalftimeRestart
-            : _state.Score.Home == _state.Score.Away ? BlitzoffKind.Standard
-            : BlitzoffKind.Blitzon;
+            : _state.ScoreWasPosted
+                ? (_state.Score.Home == _state.Score.Away ? BlitzoffKind.Standard : BlitzoffKind.Blitzon)
+                : (saysBlitzon ? BlitzoffKind.Blitzon : BlitzoffKind.Standard);
+
+        if (_state.ScoreWasPosted && !restartingSet &&
+            saysBlitzon != (_state.BlitzoffVariant == BlitzoffKind.Blitzon))
+        {
+            _state.PlayByPlay.Add(
+                $"[{timestamp:HH:mm:ss}] ⚑ Referee called a " +
+                $"{(saysBlitzon ? "BLITZON" : "BLITZOFF")} at {_state.Score.Home}:{_state.Score.Away}, " +
+                "which is the other restart by slide 15.");
+        }
 
         switch (_state.BlitzoffVariant)
         {
@@ -1190,6 +1235,82 @@ public partial class ChatParser
                 break;
         }
     }
+
+    /// <summary>The team named in a "reset for Blitzon — X ball" call, if one was seen.</summary>
+    private string? _blitzonReceivingTeam;
+
+    /// <summary>
+    /// Work out what a restart says about the score.
+    ///
+    /// A contested Blitzoff means the goal levelled the game. A Blitzon means it did
+    /// not, and the side handed the ball is the side behind — which is only readable
+    /// when the referee named them, so an unnamed Blitzon narrows nothing.
+    /// </summary>
+    private RestartReading ReadRestart(bool saysBlitzon, DateTime timestamp)
+    {
+        if (!saysBlitzon) return RestartReading.Level;
+
+        if (_blitzonReceivingTeam is not { Length: > 0 } team)
+        {
+            _state.PlayByPlay.Add(
+                $"[{timestamp:HH:mm:ss}] ⚑ BLITZON with no team named — a goal was scored, " +
+                "but not which way.");
+            return RestartReading.Unknown;
+        }
+
+        if (MatchesTeam(team, _state.HomeTeam)) return RestartReading.HomeBehind;
+        if (MatchesTeam(team, _state.AwayTeam)) return RestartReading.AwayBehind;
+
+        _state.PlayByPlay.Add(
+            $"[{timestamp:HH:mm:ss}] ⚑ BLITZON gives the ball to \"{team}\", which matches " +
+            $"neither {_state.HomeTeam} nor {_state.AwayTeam}.");
+        return RestartReading.Unknown;
+    }
+
+    /// <summary>
+    /// Referees shorten team names in passing — "Barracuda ball" for the Barracudas — so
+    /// either name containing the other is close enough to be the same side.
+    /// </summary>
+    private static bool MatchesTeam(string spoken, string rostered)
+    {
+        if (spoken.Length == 0 || rostered.Length == 0) return false;
+
+        return spoken.Contains(rostered, StringComparison.OrdinalIgnoreCase)
+            || rostered.Contains(spoken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Read the halftime deficit out of the bonus the referee announces for it.
+    /// </summary>
+    private bool TryReadDeficit(Match match, DateTime timestamp)
+    {
+        var team = match.Groups[1].Value.Trim();
+        var deficit = ReadSmallNumber(match.Groups[2].Value);
+
+        if (deficit <= 0) return false;
+
+        bool homeBehind;
+        if (MatchesTeam(team, _state.HomeTeam)) homeBehind = true;
+        else if (MatchesTeam(team, _state.AwayTeam)) homeBehind = false;
+        else return false;
+
+        _state.AdoptHalftimeDeficit(deficit, homeBehind);
+
+        _state.PlayByPlay.Add(
+            $"[{timestamp:HH:mm:ss}] {team} are {deficit} down — score read as " +
+            $"{_state.Score.Home}:{_state.Score.Away}.");
+        return true;
+    }
+
+    private static int ReadSmallNumber(string word) => word.ToLowerInvariant() switch
+    {
+        "one" => 1,
+        "two" => 2,
+        "three" => 3,
+        "four" => 4,
+        "five" => 5,
+        _ => int.TryParse(word, out var n) ? n : 0,
+    };
 
     /// <summary>
     /// Note when a Blitzon hands the ball to the wrong side.
@@ -2790,6 +2911,147 @@ public partial class ChatParser
 
     #region Status Effects
 
+    /// <summary>
+    /// Outcomes the referees state outright, rather than ones worked out from rolls.
+    ///
+    /// These are worth more than anything inferred. A player narrates what they are
+    /// attempting; an official says what happened. Where the two disagree the official
+    /// is right, and taking their word removes a whole class of drift — every place the
+    /// tracker would otherwise have to guess which roll opposed which, and compound the
+    /// error for the rest of the match when it guessed wrong.
+    /// </summary>
+    private bool TryParseOfficialCall(string message, DateTime timestamp)
+    {
+        // "<< INTERCEPTION BY Shizuka Hirano! >>" — possession has moved, whatever the
+        // rolls in Yell looked like.
+        var intercept = RegexInterception().Match(message);
+        if (intercept.Success)
+        {
+            var thief = ResolvePlayer(intercept.Groups[1].Value.Trim());
+            if (thief is not null)
+            {
+                SetBallCarrier(thief.Name, timestamp);
+
+                // An interception is what a successful BLOCK or DIVE buys you — both
+                // "intercept balls" per slides 55 and 60 — so it counts as one rather
+                // than needing a statistic of its own.
+                thief.Blocks++;
+
+                _state.PlayByPlay.Add(
+                    $"[{timestamp:HH:mm:ss}] INTERCEPTED by {thief.Name}!");
+            }
+            return true;
+        }
+
+        // "[[SURVEY - Ffon Aveross ]] PULLED" / "[[SHOVE - Manami Tsukino ]] SHOVED"
+        var pull = RegexOfficialPull().Match(message);
+        if (pull.Success)
+        {
+            var player = ResolvePlayer(pull.Groups[2].Value.Trim());
+            if (player is not null)
+            {
+                var kind = pull.Groups[1].Value.ToUpperInvariant();
+
+                // Whatever they were part-way through does not happen. A survey that
+                // pulls somebody stops the movement outright, so leaving the declared
+                // move pending would walk them to a waymark they never reached.
+                CancelPendingMovement(player, timestamp);
+
+                _state.PlayByPlay.Add(kind == "SURVEY"
+                    ? $"[{timestamp:HH:mm:ss}] {player.Name} is PULLED by a survey — the move does not happen."
+                    : $"[{timestamp:HH:mm:ss}] {player.Name} is SHOVED out of position.");
+            }
+            return true;
+        }
+
+        // "[Tie rolloff: Akii & Venn]" — the referee naming a tie the tracker may not
+        // have spotted, usually because one of the two rolls never parsed.
+        var tie = RegexTieRolloff().Match(message);
+        if (tie.Success)
+        {
+            OpenAnnouncedTieBreak(
+                tie.Groups[1].Value.Trim(), tie.Groups[2].Value.Trim(), timestamp);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Drop a declared-but-unresolved move, because an official says it did not happen.
+    /// </summary>
+    private void CancelPendingMovement(PlayerState player, DateTime timestamp)
+    {
+        foreach (var action in _state.CurrentPhaseActions)
+        {
+            if (action.Outcome != ActionOutcome.Pending) continue;
+            if (!action.PlayerName.Equals(player.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            if (action.Action is not (ActionType.Move or ActionType.Tackle)) continue;
+
+            UnapplyAction(action);
+            action.Outcome = ActionOutcome.Fail;
+        }
+
+        // A survey contest already under way is settled by the call instead of by rolls.
+        foreach (var contest in _state.SurveyContests.ToList())
+        {
+            if (!contest.Mover.Equals(player.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            _state.SurveyContests.Remove(contest);
+        }
+    }
+
+    /// <summary>
+    /// Open a tie-break the referee called, attaching it to the contest it belongs to.
+    ///
+    /// Officials write first names only ("Tie rolloff: Akii &amp; Venn"), and a tie-break
+    /// has to hang off the action it settles. When no pending contest involves both
+    /// players there is nothing to attach it to, so it is reported rather than invented —
+    /// a tie-break against the wrong action would resolve the wrong contest.
+    /// </summary>
+    private void OpenAnnouncedTieBreak(string firstName, string secondName, DateTime timestamp)
+    {
+        var one = ResolvePlayer(firstName);
+        var two = ResolvePlayer(secondName);
+
+        if (one is null || two is null)
+        {
+            _state.PlayByPlay.Add(
+                $"[{timestamp:HH:mm:ss}] ⚑ Referee called a tie roll-off between {firstName} " +
+                $"and {secondName}, who are not both on the roster.");
+            return;
+        }
+
+        var contest = _state.CurrentPhaseActions.FirstOrDefault(a =>
+            a.Outcome == ActionOutcome.Pending &&
+            a.TargetName is not null &&
+            ((a.PlayerName.Equals(one.Name, StringComparison.OrdinalIgnoreCase) &&
+              a.TargetName.Equals(two.Name, StringComparison.OrdinalIgnoreCase)) ||
+             (a.PlayerName.Equals(two.Name, StringComparison.OrdinalIgnoreCase) &&
+              a.TargetName.Equals(one.Name, StringComparison.OrdinalIgnoreCase))));
+
+        if (contest is null)
+        {
+            _state.PlayByPlay.Add(
+                $"[{timestamp:HH:mm:ss}] ⚑ Referee called a tie roll-off between {one.Name} " +
+                $"and {two.Name}, but no open contest between them was seen. Both should reroll.");
+            return;
+        }
+
+        if (_state.TieBreaks.Any(t => ReferenceEquals(t.Action, contest))) return;
+
+        _state.TieBreaks.Add(new TieBreak
+        {
+            Action = contest,
+            Challenger = contest.PlayerName,
+            Defender = contest.TargetName!,
+            TiedAt = contest.TiedAt ?? one.PhaseRoll ?? 0,
+            OpenedAt = timestamp,
+        });
+
+        _state.PlayByPlay.Add(
+            $"[{timestamp:HH:mm:ss}] Referee calls a tie roll-off: {one.Name} and {two.Name} reroll.");
+    }
+
     private bool TryParseStatus(string message, DateTime timestamp)
     {
         // [[ DAZED - PlayerName ]]
@@ -3062,6 +3324,16 @@ public partial class ChatParser
     [GeneratedRegex(@"<<\s*BLITZ(?:OFF|ON)\s*>>|\[\s*BLITZ(?:OFF|ON)\s*[.!]?\s*\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexBlitzoff();
 
+    // "[Teams, please reset for Blitzon.  Barracuda ball.]" — names the side receiving,
+    // which by slide 15 is the side behind on score.
+    [GeneratedRegex(@"reset\s+for\s+Blitzon\s*[.,]?\s*(.+?)\s+ball", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexBlitzonBall();
+
+    // "[My mistake, Barracuda had a +10 due to being down one point.]" — the halftime
+    // bonus is ten per point of deficit, so announcing it states the gap.
+    [GeneratedRegex(@"([\w'\- ]+?)\s+had\s+a\s+\+\d+\s+due\s+to\s+being\s+down\s+(\w+)\s+point", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexDeficitBonus();
+
     [GeneratedRegex(@"<<\s*ROUND\s+(\d+)\s*>>", RegexOptions.IgnoreCase)]
     private static partial Regex RegexRound();
 
@@ -3084,8 +3356,28 @@ public partial class ChatParser
     [GeneratedRegex(@"\[BALL\s+to\s+([\w\s']+)\]", RegexOptions.IgnoreCase)]
     private static partial Regex RegexBallTo();
 
-    [GeneratedRegex(@"PASS\s+COMPLETE\s+to\s+([\w\s']+?)\s*\]", RegexOptions.IgnoreCase)]
+    // "<< PASS COMPLETE TO Kauan Jaguaribara >>" is the spelling officials actually use;
+    // requiring a square bracket meant none of them were read.
+    [GeneratedRegex(@"PASS\s+COMPLETE\s+to\s+([\w\s'\-]+?)\s*[!]?\s*(?:\]|>>)", RegexOptions.IgnoreCase)]
     private static partial Regex RegexPassComplete();
+
+    // "<< INTERCEPTION BY Shizuka Hirano! >>"
+    [GeneratedRegex(@"INTERCEPT(?:ION|ED)?\s+by\s+([\w\s'\-]+?)\s*[!]?\s*(?:\]|>>)", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexInterception();
+
+    // "[[SHOVE - Manami Tsukino ]] SHOVED" and "[[SURVEY - Ffon Aveross ]] PULLED".
+    //
+    // Read the same way as "[[ DAZED - Name ]]": the brackets name the player the call is
+    // about and the trailing word says what happened to them. That is the only reading
+    // consistent across all three, but it is a reading — if referees turn out to name the
+    // surveyor rather than the player pulled, this is the line to change.
+    [GeneratedRegex(@"\[\[\s*(SHOVE|SURVEY)\s*[-–]\s*([\w\s'\-]+?)\s*\]\]\s*(SHOVED|PULLED)", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexOfficialPull();
+
+    // "[Tie rolloff: Akii & Venn]", "[Tie reroll: Vesper - Verre]", "[Tie rolloff - Kesac - Verre]".
+    // Officials use first names here, which ResolvePlayer already handles.
+    [GeneratedRegex(@"\[\s*Tie\s+(?:roll\s*off|re\s*roll)\s*[-:]?\s*([\w'\-]+)\s*(?:&|-|vs\.?|and)\s*([\w'\-]+)\s*\]", RegexOptions.IgnoreCase)]
+    private static partial Regex RegexTieRolloff();
 
     // Referees write this as "<< CAUGHT BY Akii Malaguld! >>" as often as with square
     // brackets, so the closer has to be either — matching only "]" missed every
